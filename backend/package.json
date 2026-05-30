@@ -12,7 +12,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@modelcontextprotocol/sdk": "^1.10.0",
-    "better-sqlite3": "^9.4.3",
+    "better-sqlite3": "latest",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2"
