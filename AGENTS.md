@@ -1,8 +1,8 @@
-# Curate — Claude Code Master Brief
+# Curate — Codex Master Brief
 
 ## What we're building
 Curate is a streaming subscription management tool built for QuackHacks 3.
-Users rank a watchlist of shows/movies. A Claude agent analyzes their list,
+Users rank a watchlist of shows/movies. A Codex agent analyzes their list,
 determines which 1–2 streaming services cover the most titles, and manages
 subscription switching month-to-month.
 
@@ -17,7 +17,7 @@ subscription switching month-to-month.
 |---|---|---|
 | Frontend | Next.js 14 (App Router) + Tailwind CSS | Fast scaffolding, easy deploy |
 | Backend | Node.js + Express | Simple REST API |
-| Agent | Anthropic SDK (claude-sonnet-4-20250514) | Tool use / agent loop |
+| Agent | Anthropic SDK (Codex-sonnet-4-20250514) | Tool use / agent loop |
 | MCP Server | `@modelcontextprotocol/sdk` | Subscription management tools |
 | Database | MongoDB via Mongoose | Flexible document model for demo state |
 | Seed data | `/data/shows.json` | Curated, no external API needed |
@@ -28,7 +28,7 @@ subscription switching month-to-month.
 
 ```
 curate/
-├── CLAUDE.md               ← you are here
+├── AGENTS.md               ← you are here
 ├── ARCHITECTURE.md         ← system design reference
 ├── data/
 │   └── shows.json          ← seed database (80+ titles)
@@ -46,7 +46,7 @@ curate/
 │       │   ├── shows.js     ← show search/browse
 │       │   └── subscriptions.js ← subscription state
 │       ├── agent/
-│       │   └── index.js    ← Claude agent with tool loop
+│       │   └── index.js    ← Codex agent with tool loop
 │       └── mcp/
 │           └── server.js   ← MCP server + tool definitions
 └── frontend/
@@ -96,7 +96,7 @@ curate/
 
 ## Agent design
 
-The Claude agent receives the user's ranked watchlist and current subscriptions,
+The Codex agent receives the user's ranked watchlist and current subscriptions,
 then uses tools to reason about and update subscriptions.
 
 ### MCP Tools the agent has access to

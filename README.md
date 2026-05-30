@@ -14,8 +14,9 @@ Curate analyzes your ranked watchlist and tells you exactly which 1–2 streamin
 # Backend
 cd backend
 cp .env.example .env
-# Add your ANTHROPIC_API_KEY to .env
+# Add your MONGO_URI and ANTHROPIC_API_KEY to .env
 npm install
+npm run seed
 
 # Frontend
 cd ../frontend
@@ -67,7 +68,7 @@ curate/
 ├── ARCHITECTURE.md    ← System design reference
 ├── data/
 │   └── shows.json     ← 80+ seeded titles across 8 services
-├── backend/           ← Express + SQLite + Claude Agent
+├── backend/           ← Express + MongoDB + Claude Agent
 └── frontend/          ← Next.js + Tailwind
 ```
 
@@ -79,14 +80,14 @@ curate/
 - **Backend:** Node.js + Express
 - **Agent:** Anthropic SDK (claude-sonnet-4-20250514) with tool use
 - **MCP:** @modelcontextprotocol/sdk for subscription tools
-- **Database:** SQLite via better-sqlite3
+- **Database:** MongoDB via Mongoose
 
 ---
 
 ## Hackathon notes
 
-- Subscription actions are **simulated** in SQLite (no real billing APIs)
-- Single user only — user id=1, no auth needed
+- Subscription actions are **simulated** in MongoDB (no real billing APIs)
+- Single user only — `/api/.../1` resolves to the seeded demo user, no auth needed
 - All show data is from the local `shows.json` seed file
 - Agent streams responses via Server-Sent Events
 

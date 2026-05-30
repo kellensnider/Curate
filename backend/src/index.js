@@ -6,6 +6,7 @@ const showsRouter = require('./api/shows');
 const watchlistRouter = require('./api/watchlist');
 const subscriptionsRouter = require('./api/subscriptions');
 const { runAgentStream } = require('./agent/index');
+const { connectDB } = require('./config/db');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -18,7 +19,7 @@ app.use('/api/shows', showsRouter);
 app.use('/api/watchlist', watchlistRouter);
 app.use('/api/subscriptions', subscriptionsRouter);
 
-// Agent chat — streaming SSE endpoint
+// Agent chat streaming SSE endpoint
 app.post('/api/agent/chat', async (req, res) => {
   const { message, history = [] } = req.body;
   if (!message) return res.status(400).json({ error: 'message required' });
@@ -38,8 +39,14 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n🎬 Curate backend running on http://localhost:${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/api/health`);
-  console.log(`   Shows:  http://localhost:${PORT}/api/shows/popular`);
-});
+async function startServer() {
+  await connectDB();
+
+  app.listen(PORT, () => {
+    console.log(`\nCurate backend running on http://localhost:${PORT}`);
+    console.log(`   Health: http://localhost:${PORT}/api/health`);
+    console.log(`   Shows:  http://localhost:${PORT}/api/shows/popular`);
+  });
+}
+
+startServer();

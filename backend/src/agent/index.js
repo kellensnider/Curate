@@ -103,7 +103,7 @@ async function runAgentStream(userMessage, conversationHistory = [], res) {
       for (const tool of toolUses) {
         sendEvent({ type: 'tool_call', name: tool.name, input: tool.parsedInput });
 
-        const result = executeTool(tool.name, tool.parsedInput);
+        const result = await executeTool(tool.name, tool.parsedInput);
         sendEvent({ type: 'tool_result', name: tool.name });
 
         toolResults.push({

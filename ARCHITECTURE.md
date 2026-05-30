@@ -11,8 +11,8 @@ Next.js Frontend (port 3000)
      ▼
 Express Backend (port 3001)
      ├── /api/shows          ← show search from JSON
-     ├── /api/watchlist      ← SQLite CRUD
-     ├── /api/subscriptions  ← SQLite CRUD
+     ├── /api/watchlist      ← MongoDB CRUD
+     ├── /api/subscriptions  ← MongoDB CRUD
      └── /api/agent/chat     ← proxies to Claude agent
           │
           ▼
@@ -22,7 +22,7 @@ Express Backend (port 3001)
      MCP Server (local, in-process)
           │  reads/writes
           ▼
-     SQLite DB + shows.json
+     MongoDB collections seeded from shows.json
 ```
 
 ## Agent tool call flow
@@ -57,13 +57,14 @@ MCP gives the agent a clean tool interface with defined inputs/outputs.
 It also makes a great demo talking point — judges understand "it has tools
 it can call" immediately.
 
-**Why SQLite?**
-Zero setup. The entire state of the app lives in one file.
-No database server to spin up at 3am.
+**Why MongoDB?**
+Mongoose gives the app a flexible document model for ranked watchlists,
+simulated subscription state, and stored agent recommendations.
+The demo still uses local seed data from `data/shows.json`.
 
 **Why simulate subscription actions?**
 No streaming service exposes a public "cancel my subscription" API.
-We simulate it cleanly in SQLite and call it out upfront in the pitch —
+We simulate it cleanly in MongoDB and call it out upfront in the pitch —
 "in production, this would integrate with billing APIs."
 
 **Why Next.js App Router?**
@@ -74,7 +75,7 @@ Server-Sent Events or the Vercel AI SDK's `useChat` hook if needed.
 
 Use `@dnd-kit/core` and `@dnd-kit/sortable` for drag-and-drop.
 On drop, fire `PUT /api/watchlist/:userId/rank` with the new order.
-The rank column in SQLite is the source of truth.
+The `rank` field on `WatchlistItem` is the source of truth.
 
 ```bash
 npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities

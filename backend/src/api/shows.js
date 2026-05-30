@@ -1,43 +1,42 @@
 const express = require('express');
 const router = express.Router();
-const shows = require('../../../data/shows.json');
+const { Show, serializeShow } = require('../models');
 
 // GET /api/shows?q=breaking+bad&genre=drama&service=netflix
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const { q, genre, service, limit = 20 } = req.query;
-  let results = [...shows];
+  const filter = {};
 
   if (q) {
-    const query = q.toLowerCase();
-    results = results.filter(s => s.title.toLowerCase().includes(query));
+    filter.title = { $regex: q, $options: 'i' };
   }
   if (genre) {
-    results = results.filter(s => s.genre.includes(genre));
+    filter.genre = genre;
   }
   if (service) {
-    results = results.filter(s => s.services.includes(service));
+    filter.services = service;
   }
 
-  results = results
-    .sort((a, b) => b.priority_weight - a.priority_weight)
-    .slice(0, parseInt(limit));
+  const results = await Show.find(filter)
+    .sort({ priorityWeight: -1, title: 1 })
+    .limit(Number.parseInt(limit, 10) || 20);
 
-  res.json(results);
+  res.json(results.map(serializeShow));
 });
 
 // GET /api/shows/popular - top shows for onboarding
-router.get('/popular', (req, res) => {
-  const popular = shows
-    .sort((a, b) => b.priority_weight - a.priority_weight)
-    .slice(0, 20);
-  res.json(popular);
+router.get('/popular', async (req, res) => {
+  const popular = await Show.find({})
+    .sort({ priorityWeight: -1, title: 1 })
+    .limit(20);
+  res.json(popular.map(serializeShow));
 });
 
 // GET /api/shows/:id
-router.get('/:id', (req, res) => {
-  const show = shows.find(s => s.id === req.params.id);
+router.get('/:id', async (req, res) => {
+  const show = await Show.findOne({ externalId: req.params.id });
   if (!show) return res.status(404).json({ error: 'Show not found' });
-  res.json(show);
+  res.json(serializeShow(show));
 });
 
 module.exports = router;
