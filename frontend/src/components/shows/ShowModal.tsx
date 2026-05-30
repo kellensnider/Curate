@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Show, SERVICES } from '../../lib/mockData';
 import { useShowStore } from '../../store/useShowStore';
@@ -10,21 +11,26 @@ interface ShowModalProps {
 }
 
 export default function ShowModal({ show, onClose }: ShowModalProps) {
-  const { selectedShowIds, toggleShow, addToWatchlist } = useShowStore();
-  const isSelected = show ? selectedShowIds.includes(show.id) : false;
+  const { isInWatchlist, addShowToWatchlist, removeShowFromWatchlist } = useShowStore();
+  const [loading, setLoading] = useState(false);
 
-  function handleAddToWatchlist() {
+  const inList = show ? isInWatchlist(show.id) : false;
+
+  async function handleToggle() {
     if (!show) return;
-    addToWatchlist(show);
-    if (!isSelected) toggleShow(show.id);
-    onClose();
+    setLoading(true);
+    if (inList) {
+      await removeShowFromWatchlist(show.id);
+    } else {
+      await addShowToWatchlist(show.id);
+    }
+    setLoading(false);
   }
 
   return (
     <AnimatePresence>
       {show && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -33,7 +39,6 @@ export default function ShowModal({ show, onClose }: ShowModalProps) {
             className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50"
           />
 
-          {/* Panel */}
           <motion.div
             initial={{ y: '100%', opacity: 0.8 }}
             animate={{ y: 0, opacity: 1 }}
@@ -49,9 +54,10 @@ export default function ShowModal({ show, onClose }: ShowModalProps) {
               />
               <div className="flex-1 min-w-0">
                 <h2 className="text-xl font-bold text-white leading-tight">{show.title}</h2>
-                <p className="text-zinc-400 text-sm mt-1">{show.year} · ⭐ {show.rating}</p>
+                <p className="text-zinc-400 text-sm mt-1">
+                  {show.year} · ⭐ {show.rating.toFixed(1)}
+                </p>
 
-                {/* Genres */}
                 <div className="flex flex-wrap gap-1.5 mt-3">
                   {show.genres.map((g) => (
                     <span
@@ -63,7 +69,6 @@ export default function ShowModal({ show, onClose }: ShowModalProps) {
                   ))}
                 </div>
 
-                {/* Streaming services */}
                 <div className="mt-4">
                   <p className="text-xs text-zinc-500 font-medium uppercase tracking-wider mb-2">
                     Available on
@@ -82,10 +87,7 @@ export default function ShowModal({ show, onClose }: ShowModalProps) {
                             backgroundColor: svc.brandColor + '11',
                           }}
                         >
-                          <span
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: svc.brandColor }}
-                          />
+                          <span className="w-2 h-2 rounded-full" style={{ backgroundColor: svc.brandColor }} />
                           {svc.name}
                         </div>
                       );
@@ -95,13 +97,17 @@ export default function ShowModal({ show, onClose }: ShowModalProps) {
               </div>
             </div>
 
-            {/* CTA buttons */}
             <div className="flex gap-3 mt-6">
               <button
-                onClick={handleAddToWatchlist}
-                className="flex-1 bg-white text-black font-semibold py-3 rounded-xl hover:bg-zinc-100 transition-colors text-sm"
+                onClick={handleToggle}
+                disabled={loading}
+                className={`flex-1 font-semibold py-3 rounded-xl transition-colors text-sm disabled:opacity-50 ${
+                  inList
+                    ? 'bg-zinc-800 text-zinc-300 hover:bg-red-950 hover:text-red-300'
+                    : 'bg-white text-black hover:bg-zinc-100'
+                }`}
               >
-                {isSelected ? '✓ In My List' : 'Add to My List'}
+                {loading ? '…' : inList ? '✓ In My List — Remove' : 'Add to My List'}
               </button>
               <button
                 onClick={onClose}

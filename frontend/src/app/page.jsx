@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SHOWS, ALL_GENRES, optimizeSubscriptions } from '../lib/mockData';
+import { ALL_GENRES, optimizeSubscriptions } from '../lib/mockData';
 import { useShowStore } from '../store/useShowStore';
 import { useSubscriptionStore } from '../store/useSubscriptionStore';
 import ShowGrid from '../components/shows/ShowGrid';
@@ -13,29 +13,43 @@ import Navbar from '../components/navigation/Navbar';
 export default function OnboardingPage() {
   const router = useRouter();
   const [activeGenre, setActiveGenre] = useState('All');
-  const [mounted, setMounted] = useState(false);
+  const [buildingPlan, setBuildingPlan] = useState(false);
 
-  const { selectedShowIds } = useShowStore();
+  const {
+    browseShows,
+    browseLoading,
+    browseError,
+    selectedShowIds,
+    fetchPopular,
+    toggleSelected,
+    bulkAddSelectedToWatchlist,
+    watchlistAsShows,
+  } = useShowStore();
+
   const { runOptimization } = useSubscriptionStore();
 
   useEffect(() => {
-    setMounted(true);
+    fetchPopular();
   }, []);
 
   const filteredShows = useMemo(() => {
-    if (activeGenre === 'All') return SHOWS;
-    return SHOWS.filter((show) =>
-      show.genres.some((g) => g.toLowerCase() === activeGenre.toLowerCase())
+    if (activeGenre === 'All') return browseShows;
+    return browseShows.filter((show) =>
+      show.genres.some((g) => g.toLowerCase() === activeGenre.toLowerCase()),
     );
-  }, [activeGenre]);
+  }, [browseShows, activeGenre]);
 
   const estimatedCost = useMemo(() => {
     if (selectedShowIds.length === 0) return 0;
-    return optimizeSubscriptions(selectedShowIds).monthlyTotal;
-  }, [selectedShowIds]);
+    const selShows = browseShows.filter((s) => selectedShowIds.includes(s.id));
+    return optimizeSubscriptions(selectedShowIds, selShows).monthlyTotal;
+  }, [selectedShowIds, browseShows]);
 
-  function handleBuildPlan() {
-    runOptimization(selectedShowIds);
+  async function handleBuildPlan() {
+    setBuildingPlan(true);
+    await bulkAddSelectedToWatchlist();
+    const shows = useShowStore.getState().watchlistAsShows();
+    runOptimization(shows);
     router.push('/dashboard');
   }
 
@@ -69,9 +83,20 @@ export default function OnboardingPage() {
           <GenreFilter genres={ALL_GENRES} active={activeGenre} onChange={setActiveGenre} />
         </motion.div>
 
-        {/* Show grid */}
+        {/* Error state */}
+        {browseError && (
+          <div className="mb-4 p-3 bg-red-950/50 border border-red-900/50 rounded-xl text-red-400 text-sm text-center">
+            {browseError} — make sure the backend is running on port 3001.
+          </div>
+        )}
+
+        {/* Shows grid */}
         <div className="pb-36">
-          <ShowGrid shows={filteredShows} loading={!mounted} />
+          <ShowGrid
+            shows={filteredShows}
+            loading={browseLoading}
+            emptyMessage={activeGenre !== 'All' ? `No ${activeGenre} shows found` : 'No shows found'}
+          />
         </div>
       </div>
 
@@ -99,9 +124,10 @@ export default function OnboardingPage() {
               </div>
               <button
                 onClick={handleBuildPlan}
-                className="shrink-0 bg-white text-black text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-zinc-100 active:scale-95 transition-all"
+                disabled={buildingPlan}
+                className="shrink-0 bg-white text-black text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-zinc-100 active:scale-95 disabled:opacity-60 transition-all"
               >
-                Build My Plan →
+                {buildingPlan ? 'Saving…' : 'Build My Plan →'}
               </button>
             </div>
           </motion.div>
