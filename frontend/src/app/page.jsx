@@ -1,112 +1,112 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import ServiceCard from '../components/ServiceCard';
-import { getSubscriptions, activateSubscription, cancelSubscription } from '../lib/api';
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { SHOWS, ALL_GENRES, optimizeSubscriptions } from '../lib/mockData';
+import { useShowStore } from '../store/useShowStore';
+import { useSubscriptionStore } from '../store/useSubscriptionStore';
+import ShowGrid from '../components/shows/ShowGrid';
+import GenreFilter from '../components/onboarding/GenreFilter';
+import Navbar from '../components/navigation/Navbar';
 
-export default function SubscriptionsPage() {
-  const [subscriptions, setSubscriptions] = useState([]);
-  const [monthlyTotal, setMonthlyTotal] = useState(0);
-  const [loadingService, setLoadingService] = useState(null);
-  const [error, setError] = useState(null);
+export default function OnboardingPage() {
+  const router = useRouter();
+  const [activeGenre, setActiveGenre] = useState('All');
+  const [mounted, setMounted] = useState(false);
 
-  async function load() {
-    try {
-      const data = await getSubscriptions();
-      setSubscriptions(data.subscriptions);
-      setMonthlyTotal(data.monthly_total);
-    } catch {
-      setError('Could not reach backend — is it running on port 3001?');
-    }
+  const { selectedShowIds } = useShowStore();
+  const { runOptimization } = useSubscriptionStore();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const filteredShows = useMemo(() => {
+    if (activeGenre === 'All') return SHOWS;
+    return SHOWS.filter((show) =>
+      show.genres.some((g) => g.toLowerCase() === activeGenre.toLowerCase())
+    );
+  }, [activeGenre]);
+
+  const estimatedCost = useMemo(() => {
+    if (selectedShowIds.length === 0) return 0;
+    return optimizeSubscriptions(selectedShowIds).monthlyTotal;
+  }, [selectedShowIds]);
+
+  function handleBuildPlan() {
+    runOptimization(selectedShowIds);
+    router.push('/dashboard');
   }
-
-  useEffect(() => { load(); }, []);
-
-  async function handleActivate(service) {
-    setLoadingService(service);
-    await activateSubscription(service);
-    await load();
-    setLoadingService(null);
-  }
-
-  async function handleCancel(service) {
-    setLoadingService(service);
-    await cancelSubscription(service);
-    await load();
-    setLoadingService(null);
-  }
-
-  const active = subscriptions.filter(s => s.status === 'active');
-  const inactive = subscriptions.filter(s => s.status !== 'active');
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-12">
-      <div className="mb-10">
-        <h1 className="text-3xl font-bold text-white">Curate</h1>
-        <p className="text-gray-400 mt-1">Manage your streaming subscriptions</p>
+    <div className="min-h-screen bg-zinc-950">
+      <Navbar />
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-8">
+        {/* Hero */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-center mb-10"
+        >
+          <h1 className="text-5xl sm:text-6xl font-black text-white tracking-tight leading-none">
+            What do you<br />want to watch?
+          </h1>
+          <p className="text-zinc-400 text-lg mt-4 font-medium">
+            Tell us your shows. We&apos;ll handle the subscriptions.
+          </p>
+        </motion.div>
+
+        {/* Genre filter */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="mb-6"
+        >
+          <GenreFilter genres={ALL_GENRES} active={activeGenre} onChange={setActiveGenre} />
+        </motion.div>
+
+        {/* Show grid */}
+        <div className="pb-36">
+          <ShowGrid shows={filteredShows} loading={!mounted} />
+        </div>
       </div>
 
-      {error && (
-        <div className="mb-6 bg-red-950 border border-red-800 text-red-300 rounded-lg px-4 py-3 text-sm">
-          {error}
-        </div>
-      )}
-
-      {/* Monthly spend summary */}
-      <div className="mb-8 bg-gray-900 border border-gray-800 rounded-xl px-6 py-4 flex items-center justify-between">
-        <div>
-          <div className="text-sm text-gray-400">Monthly spend</div>
-          <div className="text-2xl font-bold text-white">${monthlyTotal.toFixed(2)}</div>
-        </div>
-        <div className="text-right">
-          <div className="text-sm text-gray-400">Active services</div>
-          <div className="text-2xl font-bold text-white">{active.length}</div>
-        </div>
-      </div>
-
-      {/* Active */}
-      {active.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            Active
-          </h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {active.map(sub => (
-              <ServiceCard
-                key={sub.service}
-                {...sub}
-                loading={loadingService === sub.service}
-                onActivate={handleActivate}
-                onCancel={handleCancel}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Available */}
-      {inactive.length > 0 && (
-        <section>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            Available
-          </h2>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {inactive.map(sub => (
-              <ServiceCard
-                key={sub.service}
-                {...sub}
-                loading={loadingService === sub.service}
-                onActivate={handleActivate}
-                onCancel={handleCancel}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {subscriptions.length === 0 && !error && (
-        <div className="text-center text-gray-600 py-20">Loading...</div>
-      )}
-    </main>
+      {/* Floating bottom bar */}
+      <AnimatePresence>
+        {selectedShowIds.length > 0 && (
+          <motion.div
+            initial={{ y: 120, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 120, opacity: 0 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 28 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md"
+          >
+            <div className="bg-zinc-900/95 backdrop-blur-md border border-zinc-700 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 shadow-2xl shadow-black/50">
+              <div>
+                <p className="text-white font-semibold text-sm">
+                  {selectedShowIds.length} show{selectedShowIds.length !== 1 ? 's' : ''} selected
+                </p>
+                <p className="text-zinc-400 text-xs mt-0.5">
+                  Estimated:{' '}
+                  <span className="text-emerald-400 font-semibold">
+                    ${estimatedCost.toFixed(2)}/month
+                  </span>
+                </p>
+              </div>
+              <button
+                onClick={handleBuildPlan}
+                className="shrink-0 bg-white text-black text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-zinc-100 active:scale-95 transition-all"
+              >
+                Build My Plan →
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
