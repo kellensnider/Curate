@@ -24,11 +24,13 @@ function serializeShow(show) {
     _id: doc._id,
     id: doc.externalId,
     externalId: doc.externalId,
+    source: doc.source,
     title: doc.title,
     type: doc.type,
     genre: doc.genre || [],
     year: doc.year,
     services: doc.services || [],
+    offers: doc.offers || [],
     priority_weight: doc.priorityWeight,
     priorityWeight: doc.priorityWeight,
   };

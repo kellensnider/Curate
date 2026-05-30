@@ -7,7 +7,10 @@
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "seed": "node src/seed/seedDemoData.js"
+    "seed": "node src/seed/seedDemoData.js",
+    "ingest:justwatch": "cd ingest && python justwatch_ingest.py --count 80 --include-curated",
+    "import:justwatch": "node src/seed/importJustWatchData.js",
+    "refresh:justwatch": "npm run ingest:justwatch && npm run import:justwatch"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

@@ -88,8 +88,23 @@ curate/
 
 - Subscription actions are **simulated** in MongoDB (no real billing APIs)
 - Single user only — `/api/.../1` resolves to the seeded demo user, no auth needed
-- All show data is from the local `shows.json` seed file
+- Show data starts from local `shows.json`; optional JustWatch ingestion writes `data/justwatch_shows.json`
 - Agent streams responses via Server-Sent Events
+
+## JustWatch Refresh
+
+```bash
+cd backend
+cd ingest
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cd ..
+npm run refresh:justwatch
+```
+
+The JustWatch integration uses an unofficial Python API and currently maps only
+Curate's 8 supported streaming providers.
 
 ---
 

@@ -17,6 +17,7 @@ const ACTIVE_DEMO_SERVICES = ['netflix', 'max', 'disney'];
 function mapSeedShow(show) {
   return {
     externalId: show.id,
+    source: 'seed',
     title: show.title,
     type: show.type,
     genre: show.genre || [],

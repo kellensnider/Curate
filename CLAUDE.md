@@ -20,7 +20,7 @@ subscription switching month-to-month.
 | Agent | Anthropic SDK (claude-sonnet-4-20250514) | Tool use / agent loop |
 | MCP Server | `@modelcontextprotocol/sdk` | Subscription management tools |
 | Database | MongoDB via Mongoose | Flexible document model for demo state |
-| Seed data | `/data/shows.json` | Curated, no external API needed |
+| Seed data | `/data/shows.json` + optional `/data/justwatch_shows.json` | Curated fallback plus generated JustWatch availability |
 
 ---
 
@@ -224,7 +224,7 @@ const SERVICE_PRICES = {
 
 - **No real payment/account APIs.** Subscription state is simulated in MongoDB.
 - **Single user only.** No auth. `/api/.../1` resolves to the seeded demo user.
-- **No external show API.** All data comes from `shows.json`.
+- **Show data source.** Curated data comes from `shows.json`; optional JustWatch ingestion writes `justwatch_shows.json`.
 - **Feature freeze at hour 16.** After that, polish only.
 - **Must work offline** (except Anthropic API calls).
 
