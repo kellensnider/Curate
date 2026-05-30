@@ -1,20 +1,20 @@
 {
   "name": "curate-backend",
   "version": "1.0.0",
-  "description": "Curate backend - Express + SQLite + Claude Agent",
+  "description": "Curate backend - Express + MongoDB + Claude Agent",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
-    "seed": "node src/db/seed.js"
+    "seed": "node src/seed/seedDemoData.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
     "@modelcontextprotocol/sdk": "^1.10.0",
-    "better-sqlite3": "latest",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "mongoose": "^8.19.4"
   }
 }

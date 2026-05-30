@@ -19,7 +19,7 @@ subscription switching month-to-month.
 | Backend | Node.js + Express | Simple REST API |
 | Agent | Anthropic SDK (claude-sonnet-4-20250514) | Tool use / agent loop |
 | MCP Server | `@modelcontextprotocol/sdk` | Subscription management tools |
-| Database | SQLite via `better-sqlite3` | Zero setup, file-based |
+| Database | MongoDB via Mongoose | Flexible document model for demo state |
 | Seed data | `/data/shows.json` | Curated, no external API needed |
 
 ---
@@ -36,8 +36,11 @@ curate/
 │   ├── package.json
 │   └── src/
 │       ├── index.js        ← Express server entry
-│       ├── db/
-│       │   └── schema.js   ← SQLite setup + seed loader
+│       ├── config/
+│       │   └── db.js       ← MongoDB connection
+│       ├── models/         ← Mongoose models
+│       ├── seed/
+│       │   └── seedDemoData.js ← seed loader
 │       ├── api/
 │       │   ├── watchlist.js ← CRUD for user watchlist
 │       │   ├── shows.js     ← show search/browse
@@ -80,30 +83,14 @@ curate/
 }
 ```
 
-### SQLite tables
-```sql
--- Users (single user for demo, id=1)
-CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT);
+### MongoDB collections
 
--- Watchlist items (user's ranked list)
-CREATE TABLE watchlist (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  show_id TEXT,        -- references shows.json id
-  rank INTEGER,        -- 1 = highest priority
-  created_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-
--- Subscription state (simulated)
-CREATE TABLE subscriptions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  service TEXT,        -- 'netflix', 'hulu', 'disney', 'max', 'peacock', 'prime', 'appletv', 'paramount'
-  status TEXT,         -- 'active' | 'cancelled'
-  monthly_cost REAL,
-  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-);
-```
+- `users`: one seeded demo user with preferences
+- `shows`: seeded from `data/shows.json`
+- `watchlistitems`: ranked user watchlist, populated with `Show`
+- `subscriptions`: simulated subscription state and monthly costs
+- `agentrecommendations`: stored recommendation output
+- `agentactions`: simulated agent subscription changes
 
 ---
 
@@ -195,7 +182,7 @@ const SERVICE_PRICES = {
 
 ### Phase 1 — Data + DB (start here)
 1. Create `data/shows.json` with 80+ seeded titles
-2. Set up SQLite schema + seed loader
+2. Set up MongoDB connection, Mongoose models, and seed loader
 3. Seed demo user (id=1) with 3 active subscriptions
 
 ### Phase 2 — Backend API
@@ -235,8 +222,8 @@ const SERVICE_PRICES = {
 
 ## Hackathon constraints
 
-- **No real payment/account APIs.** Subscription state is simulated in SQLite.
-- **Single user only.** No auth. User id=1 is hardcoded for demo.
+- **No real payment/account APIs.** Subscription state is simulated in MongoDB.
+- **Single user only.** No auth. `/api/.../1` resolves to the seeded demo user.
 - **No external show API.** All data comes from `shows.json`.
 - **Feature freeze at hour 16.** After that, polish only.
 - **Must work offline** (except Anthropic API calls).
@@ -247,7 +234,7 @@ const SERVICE_PRICES = {
 
 ```bash
 # From project root
-cd backend && npm init -y && npm install express better-sqlite3 cors dotenv @anthropic-ai/sdk @modelcontextprotocol/sdk
+cd backend && npm init -y && npm install express mongoose cors dotenv @anthropic-ai/sdk @modelcontextprotocol/sdk
 cd ../frontend && npx create-next-app@latest . --tailwind --app --no-typescript --no-eslint --src-dir
 ```
 
@@ -259,7 +246,7 @@ Create `backend/.env`:
 ```
 ANTHROPIC_API_KEY=your_key_here
 PORT=3001
-DB_PATH=./curate.db
+MONGO_URI=mongodb://localhost:27017/curate
 ```
 
 Create `frontend/.env.local`:
@@ -273,4 +260,4 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 
 Read this file completely first. Then begin with Phase 1:
 create `data/shows.json` with 80 titles covering all 8 services,
-then set up the SQLite schema. Do not skip ahead.
+then set up the MongoDB model layer. Do not skip ahead.
