@@ -29,7 +29,7 @@ pip install -r requirements.txt
 ## Run Ingestion
 
 ```bash
-python justwatch_ingest.py --country US --language en --count 80 --include-curated
+python justwatch_ingest.py --country US --language en --count 250 --include-curated
 ```
 
 This writes normalized output to:
@@ -50,8 +50,36 @@ npm run import:justwatch
 From `backend/`:
 
 ```bash
-npm run refresh:justwatch
+npm run refresh:catalog
 ```
+
+This runs ingestion, writes `data/justwatch_shows.json`, then upserts the
+normalized catalog into MongoDB.
+
+## Verify MongoDB Catalog
+
+```bash
+cd backend
+npm run verify:catalog
+```
+
+The verifier prints total records, poster coverage, counts by type/service, and
+five sample records.
+
+## Frontend Data Shape
+
+The frontend and `/api/shows` responses expect these show fields:
+
+- `_id`
+- `externalId`
+- `title`
+- `type`
+- `year`
+- `genre`
+- `services`
+- `posterUrl`
+- `backdropUrl`
+- `overview`
 
 ## Current Limits
 
@@ -68,3 +96,6 @@ Curate only maps these 8 streaming providers for now:
 
 Unsupported providers are ignored for Curate availability, but raw JustWatch
 metadata is kept in each record's `rawJustWatch` field when available.
+
+Records without a usable poster are skipped during ingestion unless an existing
+database record already has a poster during import.

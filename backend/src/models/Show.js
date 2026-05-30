@@ -20,7 +20,7 @@ const showSchema = new mongoose.Schema(
     source: {
       type: String,
       enum: ['seed', 'justwatch'],
-      default: 'seed',
+      default: 'justwatch',
     },
     title: {
       type: String,
@@ -35,6 +35,9 @@ const showSchema = new mongoose.Schema(
     genre: [String],
     year: Number,
     services: [String],
+    posterUrl: String,
+    backdropUrl: String,
+    overview: String,
     offers: [offerSchema],
     priorityWeight: {
       type: Number,

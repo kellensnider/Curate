@@ -100,7 +100,8 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cd ..
-npm run refresh:justwatch
+npm run refresh:catalog
+npm run verify:catalog
 ```
 
 The JustWatch integration uses an unofficial Python API and currently maps only
