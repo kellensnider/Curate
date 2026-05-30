@@ -21,11 +21,26 @@ export interface Service {
   logo: string;
 }
 
+/** A purchasable plan: either a single service or a multi-service bundle. */
+export interface PlanOption {
+  id: string;
+  name: string;
+  monthlyPrice: number;
+  /** Content service ids this purchase grants access to. */
+  services: string[];
+  isBundle: boolean;
+}
+
 export interface OptimizationResult {
+  /** Flattened list of content services the plan grants (drives coverage UI). */
   requiredServices: Service[];
+  /** What to actually buy — individual services and/or bundles. */
+  purchases: PlanOption[];
   monthlyTotal: number;
   monthlySavings: number;
+  /** Per-show: which of the plan's services cover it. */
   coverageMap: Record<string, string[]>;
+  /** Per-service: which selected shows it covers (independent of the chosen plan). */
   coverage: Record<string, string[]>;
 }
 
@@ -50,6 +65,29 @@ export const SHOWS: Show[] = (catalogData as Show[])
 
 export const ALL_SERVICES_TOTAL = SERVICES.reduce((sum, service) => sum + service.monthlyPrice, 0);
 
+/**
+ * Multi-service bundles (with-ads tiers). A bundle is a single purchase that
+ * grants access to several content services — often far better value than
+ * buying those services individually. Mirrors the backend BUNDLES.
+ */
+export const BUNDLES: PlanOption[] = [
+  { id: 'disney_hulu',     name: 'Disney+ & Hulu',      monthlyPrice: 12.99, services: ['disney', 'hulu'],        isBundle: true },
+  { id: 'disney_hulu_max', name: 'Disney+, Hulu & Max', monthlyPrice: 19.99, services: ['disney', 'hulu', 'max'], isBundle: true },
+  { id: 'appletv_peacock', name: 'Apple TV+ & Peacock', monthlyPrice: 14.99, services: ['appletv', 'peacock'],    isBundle: true },
+];
+
+/** Every purchasable option: each individual service plus every bundle. */
+export const PLAN_OPTIONS: PlanOption[] = [
+  ...SERVICES.map((s) => ({
+    id: s.id,
+    name: s.name,
+    monthlyPrice: s.monthlyPrice,
+    services: [s.id],
+    isBundle: false,
+  })),
+  ...BUNDLES,
+];
+
 export const ALL_GENRES = [
   'All',
   ...Array.from(new Set(SHOWS.flatMap((show) => show.genres))).sort((a, b) =>
@@ -65,13 +103,67 @@ export function getShowById(id: string): Show | undefined {
   return SHOWS.find((show) => show.id === id);
 }
 
+export function getOptionById(id: string): PlanOption | undefined {
+  return PLAN_OPTIONS.find((o) => o.id === id);
+}
+
+/** Number of selected shows a plan result covers (coverageMap entry non-empty). */
+export function coveredShowCount(result: OptimizationResult): number {
+  return Object.values(result.coverageMap).filter((svcs) => svcs.length > 0).length;
+}
+
+/** Per-service map of which selected shows each individual service covers. */
+function buildServiceCoverage(selectedShows: Show[]): Record<string, string[]> {
+  const coverage = Object.fromEntries(SERVICES.map((s) => [s.id, [] as string[]]));
+  for (const show of selectedShows) {
+    for (const serviceId of show.streamingServices) {
+      coverage[serviceId]?.push(show.id);
+    }
+  }
+  return coverage;
+}
+
+export interface OptimizeOptions {
+  /**
+   * Max number of *purchases* per month (the "1–2" rule). A bundle counts as a
+   * single purchase even though it grants several services.
+   */
+  maxPurchases?: number;
+}
+
+// Enumerate every combination of `items` with size 1..max.
+function combinations<T>(items: T[], max: number): T[][] {
+  const out: T[][] = [];
+  const recurse = (start: number, combo: T[]) => {
+    if (combo.length > 0) out.push(combo);
+    if (combo.length === max) return;
+    for (let i = start; i < items.length; i++) {
+      recurse(i + 1, [...combo, items[i]]);
+    }
+  };
+  recurse(0, []);
+  return out;
+}
+
+/**
+ * Finds the optimal subscription plan by exhaustively comparing every
+ * combination of purchasable options (individual services + bundles) up to
+ * `maxPurchases`. Among all plans it maximizes rank-weighted show coverage,
+ * then breaks ties toward the cheapest. Because it evaluates whole plans — not
+ * one service at a time — it correctly prefers a bundle over two pricier
+ * individual subscriptions when the bundle covers more for less.
+ */
 export function optimizeSubscriptions(
   selectedShowIds: string[],
-  pool: Show[] = SHOWS
+  pool: Show[] = SHOWS,
+  options: OptimizeOptions = {}
 ): OptimizationResult {
+  const { maxPurchases = 2 } = options;
+
   if (selectedShowIds.length === 0) {
     return {
       requiredServices: [],
+      purchases: [],
       monthlyTotal: 0,
       monthlySavings: ALL_SERVICES_TOTAL,
       coverageMap: {},
@@ -79,85 +171,99 @@ export function optimizeSubscriptions(
     };
   }
 
-  const selectedShows = pool.filter((show) => selectedShowIds.includes(show.id));
-  const serviceCoverage = Object.fromEntries(
-    SERVICES.map((service) => [service.id, [] as string[]])
-  );
+  // Preserve watchlist order (index 0 = rank 1 = most-wanted) and weight by rank,
+  // so the plan favors covering the titles the user cares about most.
+  const byId = new Map(pool.map((s) => [s.id, s]));
+  const orderedShows = selectedShowIds
+    .map((id) => byId.get(id))
+    .filter((s): s is Show => Boolean(s));
+  const n = orderedShows.length;
+  const weightOf = new Map(orderedShows.map((s, i) => [s.id, n - i]));
 
-  for (const show of selectedShows) {
-    for (const serviceId of show.streamingServices) {
-      serviceCoverage[serviceId]?.push(show.id);
+  const scorePlan = (combo: PlanOption[]) => {
+    const granted = new Set(combo.flatMap((o) => o.services));
+    let weight = 0;
+    for (const show of orderedShows) {
+      if (show.streamingServices.some((s) => granted.has(s))) {
+        weight += weightOf.get(show.id) ?? 0;
+      }
+    }
+    const cost = combo.reduce((sum, o) => sum + o.monthlyPrice, 0);
+    return { weight, cost };
+  };
+
+  let best: PlanOption[] = [];
+  let bestScore = { weight: -1, cost: Infinity };
+
+  for (const combo of combinations(PLAN_OPTIONS, maxPurchases)) {
+    const { weight, cost } = scorePlan(combo);
+    // Skip plans containing an option that adds no coverage (pure dead weight).
+    if (combo.length > 1) {
+      const redundant = combo.some(
+        (opt) => scorePlan(combo.filter((o) => o !== opt)).weight === weight
+      );
+      if (redundant) continue;
+    }
+    if (weight > bestScore.weight || (weight === bestScore.weight && cost < bestScore.cost)) {
+      best = combo;
+      bestScore = { weight, cost };
     }
   }
 
-  const rankedServices = SERVICES
-    .map((service) => ({
-      service,
-      coveredIds: serviceCoverage[service.id] ?? [],
-    }))
-    .filter((entry) => entry.coveredIds.length > 0)
-    .sort((a, b) => {
-      const coverageDelta = b.coveredIds.length - a.coveredIds.length;
-      if (coverageDelta !== 0) return coverageDelta;
-      return a.service.monthlyPrice - b.service.monthlyPrice;
-    });
+  const granted = new Set(best.flatMap((o) => o.services));
+  const requiredServices = SERVICES.filter((s) => granted.has(s.id));
 
-  const requiredServices = chooseBestServices(selectedShows, rankedServices);
   const coverageMap: Record<string, string[]> = {};
-
-  for (const show of selectedShows) {
-    coverageMap[show.id] = show.streamingServices.filter((serviceId) =>
-      requiredServices.some((service) => service.id === serviceId)
-    );
+  for (const show of orderedShows) {
+    coverageMap[show.id] = show.streamingServices.filter((s) => granted.has(s));
   }
 
-  const monthlyTotal = requiredServices.reduce((sum, service) => sum + service.monthlyPrice, 0);
+  const monthlyTotal = best.reduce((sum, o) => sum + o.monthlyPrice, 0);
   const monthlySavings = Math.max(0, ALL_SERVICES_TOTAL - monthlyTotal);
 
   return {
     requiredServices,
+    purchases: best,
     monthlyTotal,
     monthlySavings,
     coverageMap,
-    coverage: serviceCoverage,
+    coverage: buildServiceCoverage(orderedShows),
   };
 }
 
-function chooseBestServices(
-  selectedShows: Show[],
-  rankedServices: Array<{ service: Service; coveredIds: string[] }>
-): Service[] {
-  if (selectedShows.length === 0) return [];
-  if (rankedServices.length <= 2) return rankedServices.map((entry) => entry.service);
+/**
+ * Builds a plan result from an explicit set of chosen option ids (services
+ * and/or bundles) — used when the user manually edits their plan. Mirrors the
+ * shape of optimizeSubscriptions so the same UI can render either.
+ */
+export function planFromOptionIds(
+  optionIds: string[],
+  selectedShowIds: string[],
+  pool: Show[] = SHOWS
+): OptimizationResult {
+  const purchases = PLAN_OPTIONS.filter((o) => optionIds.includes(o.id));
+  const granted = new Set(purchases.flatMap((o) => o.services));
+  const requiredServices = SERVICES.filter((s) => granted.has(s.id));
 
-  const selectedIds = new Set(selectedShows.map((show) => show.id));
-  let bestPair: Service[] = [];
-  let bestCovered = -1;
-  let bestCost = Number.POSITIVE_INFINITY;
+  const byId = new Map(pool.map((s) => [s.id, s]));
+  const orderedShows = selectedShowIds
+    .map((id) => byId.get(id))
+    .filter((s): s is Show => Boolean(s));
 
-  for (let i = 0; i < rankedServices.length; i++) {
-    for (let j = i; j < rankedServices.length; j++) {
-      const pair = [rankedServices[i].service];
-      if (j !== i) pair.push(rankedServices[j].service);
-
-      const covered = new Set<string>();
-      for (const service of pair) {
-        const entry = rankedServices.find((ranked) => ranked.service.id === service.id);
-        for (const showId of entry?.coveredIds ?? []) {
-          covered.add(showId);
-        }
-      }
-
-      const coveredCount = Array.from(covered).filter((id) => selectedIds.has(id)).length;
-      const cost = pair.reduce((sum, service) => sum + service.monthlyPrice, 0);
-
-      if (coveredCount > bestCovered || (coveredCount === bestCovered && cost < bestCost)) {
-        bestPair = pair;
-        bestCovered = coveredCount;
-        bestCost = cost;
-      }
-    }
+  const coverageMap: Record<string, string[]> = {};
+  for (const show of orderedShows) {
+    coverageMap[show.id] = show.streamingServices.filter((s) => granted.has(s));
   }
 
-  return bestPair;
+  const monthlyTotal = purchases.reduce((sum, o) => sum + o.monthlyPrice, 0);
+  const monthlySavings = Math.max(0, ALL_SERVICES_TOTAL - monthlyTotal);
+
+  return {
+    requiredServices,
+    purchases,
+    monthlyTotal,
+    monthlySavings,
+    coverageMap,
+    coverage: buildServiceCoverage(orderedShows),
+  };
 }

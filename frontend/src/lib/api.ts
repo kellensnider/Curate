@@ -13,6 +13,9 @@ export interface BackendShow {
   genre: string[];
   year: number;
   services: string[];
+  posterUrl?: string;
+  backdropUrl?: string;
+  overview?: string;
   priorityWeight?: number;
   priority_weight?: number;
   offers?: Array<{
@@ -178,7 +181,11 @@ export function adaptShow(s: BackendShow): Show {
   return {
     id: s.externalId ?? (s as any)._id ?? '',
     title: s.title,
-    posterUrl: `https://picsum.photos/seed/${encodeURIComponent(s.title)}/300/450`,
+    type: s.type ?? 'movie',
+    // Use the real catalog poster; fall back to a placeholder only if missing.
+    posterUrl: s.posterUrl || `https://picsum.photos/seed/${encodeURIComponent(s.title)}/300/450`,
+    backdropUrl: s.backdropUrl,
+    overview: s.overview,
     genres: Array.isArray(s.genre) ? s.genre : [],
     streamingServices: Array.isArray(s.services) ? s.services : [],
     year: s.year ?? 0,

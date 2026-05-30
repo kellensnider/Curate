@@ -268,13 +268,19 @@ export default function AuditPage() {
                         <span className="text-zinc-400 line-through">${currentMonthly.toFixed(2)}/mo</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-white font-semibold">Optimized plan</span>
+                        <span className="text-white font-semibold">
+                          Optimized plan
+                          <span className="text-zinc-500 font-normal"> · {optimizedPlan.purchases.map((p) => p.name).join(' + ')}</span>
+                        </span>
                         <span className="text-white font-bold">${optimizedPlan.monthlyTotal.toFixed(2)}/mo</span>
                       </div>
-                      {optimizedPlan.monthlySavings > 0 && (
+                      {currentMonthly - optimizedPlan.monthlyTotal > 0 && (
                         <div className="flex justify-between text-sm pt-1 border-t border-emerald-900/50">
                           <span className="text-emerald-400 font-semibold">Monthly savings</span>
-                          <span className="text-emerald-400 font-bold">${optimizedPlan.monthlySavings.toFixed(2)}</span>
+                          <span className="text-emerald-400 font-bold">
+                            ${(currentMonthly - optimizedPlan.monthlyTotal).toFixed(2)}
+                            <span className="text-emerald-700 font-normal"> · ${((currentMonthly - optimizedPlan.monthlyTotal) * 12).toFixed(0)}/yr</span>
+                          </span>
                         </div>
                       )}
                     </div>

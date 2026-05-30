@@ -16,8 +16,9 @@ interface SubscriptionState {
   loading: boolean;
   error: string | null;
 
-  // Local optimization result
-  optimizedPlan: OptimizationResult | null;
+  // Optimization results
+  optimizedPlan: OptimizationResult | null; // the optimal recommendation (read-only reference)
+  selectedPlan: OptimizationResult | null;  // what the user has chosen (defaults to optimal, editable)
   confirmed: boolean;
 
   // Actions
@@ -26,6 +27,7 @@ interface SubscriptionState {
   activate: (service: string) => Promise<void>;
   cancel: (service: string) => Promise<void>;
   runOptimization: (shows: Show[]) => void;
+  selectPlan: (plan: OptimizationResult | null) => void;
   confirmPlan: () => void;
   reset: () => void;
 }
@@ -37,6 +39,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   loading: false,
   error: null,
   optimizedPlan: null,
+  selectedPlan: null,
   confirmed: false,
 
   fetchSubscriptions: async () => {
@@ -75,10 +78,13 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   runOptimization: (shows) => {
     const ids = shows.map((s) => s.id);
     const plan = optimizeSubscriptions(ids, shows);
-    set({ optimizedPlan: plan, confirmed: false });
+    // Default the user's selection to the optimal plan; they can edit from there.
+    set({ optimizedPlan: plan, selectedPlan: plan, confirmed: false });
   },
+
+  selectPlan: (plan) => set({ selectedPlan: plan, confirmed: false }),
 
   confirmPlan: () => set({ confirmed: true }),
 
-  reset: () => set({ optimizedPlan: null, confirmed: false }),
+  reset: () => set({ optimizedPlan: null, selectedPlan: null, confirmed: false }),
 }));

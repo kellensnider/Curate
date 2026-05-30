@@ -3,10 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { SERVICES } from '../../lib/mockData';
+import { SERVICES, planFromOptionIds, getOptionById } from '../../lib/mockData';
 import { useShowStore } from '../../store/useShowStore';
 import { useSubscriptionStore } from '../../store/useSubscriptionStore';
-import ServiceCard from '../../components/subscriptions/ServiceCard';
+import PlanBuilder from '../../components/subscriptions/PlanBuilder';
 import CostCalculator from '../../components/subscriptions/CostCalculator';
 import OptimizationSummary from '../../components/subscriptions/OptimizationSummary';
 import WatchBeforeRenewal from '../../components/subscriptions/WatchBeforeRenewal';
@@ -22,10 +22,12 @@ export default function DashboardPage() {
   const {
     subscriptions,
     optimizedPlan,
+    selectedPlan,
     loading: subsLoading,
     fetchSubscriptions,
     fetchPrices,
     runOptimization,
+    selectPlan,
   } = useSubscriptionStore();
 
   const [pipeline, setPipeline] = useState<PipelineStep[]>([
@@ -61,11 +63,36 @@ export default function DashboardPage() {
   }, []);
 
   const plan = optimizedPlan;
-  const activeServiceIds = plan?.requiredServices.map((s) => s.id) ?? [];
   const watchlistShows = watchlistAsShows();
   const activeSubs = subscriptions.filter((s) => s.status === 'active');
 
   const allDone = pipeline.every((s) => s.status === 'done');
+
+  // The user's current (editable) selection — defaults to the optimal plan.
+  const current = selectedPlan ?? optimizedPlan;
+  const selectedOptionIds = current?.purchases.map((p) => p.id) ?? [];
+
+  function toggleOption(id: string) {
+    const opt = getOptionById(id);
+    let next: string[];
+    if (selectedOptionIds.includes(id)) {
+      next = selectedOptionIds.filter((x) => x !== id);
+    } else {
+      next = [...selectedOptionIds, id];
+      // Adding a bundle supersedes its individual constituent services.
+      if (opt?.isBundle) {
+        next = next.filter((x) => {
+          const o = getOptionById(x);
+          return o ? o.isBundle || !opt.services.includes(o.id) : true;
+        });
+      }
+    }
+    selectPlan(planFromOptionIds(next, watchlistShows.map((s) => s.id), watchlistShows));
+  }
+
+  function useRecommended() {
+    selectPlan(optimizedPlan);
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -104,26 +131,24 @@ export default function DashboardPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Service cards */}
+          {/* Interactive plan builder */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              {SERVICES.map((service, i) => {
-                const isActive = activeServiceIds.includes(service.id);
-                const coveredShows = watchlistShows.filter((show) =>
-                  show.streamingServices.includes(service.id),
-                );
-                return (
-                  <motion.div
-                    key={service.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05, duration: 0.3 }}
-                  >
-                    <ServiceCard service={service} isActive={isActive} coveredShows={coveredShows} />
-                  </motion.div>
-                );
-              })}
-            </div>
+            {plan && current ? (
+              <PlanBuilder
+                watchlistShows={watchlistShows}
+                recommended={plan}
+                custom={current}
+                selectedIds={selectedOptionIds}
+                onToggle={toggleOption}
+                onUseRecommended={useRecommended}
+              />
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {SERVICES.map((s) => (
+                  <div key={s.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 animate-pulse h-28" />
+                ))}
+              </div>
+            )}
 
             {/* Watch before renewal */}
             <WatchBeforeRenewal />
@@ -143,8 +168,8 @@ export default function DashboardPage() {
 
           {/* Right sidebar */}
           <div className="lg:col-span-1 space-y-4">
-            {plan ? (
-              <CostCalculator result={plan} />
+            {current ? (
+              <CostCalculator result={current} />
             ) : (
               <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 animate-pulse h-52" />
             )}

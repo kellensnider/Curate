@@ -17,10 +17,11 @@ export default function ConfirmPage() {
   const [confirmed, setConfirmed] = useState(false);
 
   const { watchlistAsShows } = useShowStore();
-  const { subscriptions, optimizedPlan, confirmPlan, activate, cancel } =
+  const { subscriptions, optimizedPlan, selectedPlan, confirmPlan, activate, cancel } =
     useSubscriptionStore();
 
-  const plan = optimizedPlan;
+  // Honor the user's edited selection from the dashboard; fall back to the optimal plan.
+  const plan = selectedPlan ?? optimizedPlan;
   const watchlistShows = watchlistAsShows();
   const activeServiceIds = plan?.requiredServices.map((s) => s.id) ?? [];
   const activeSubs = subscriptions.filter((s) => s.status === 'active');

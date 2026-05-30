@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { OptimizationResult, ALL_SERVICES_TOTAL } from '../../lib/mockData';
+import { OptimizationResult, ALL_SERVICES_TOTAL, getServiceById } from '../../lib/mockData';
 
 function useCountUp(target: number, duration = 900): number {
   const [value, setValue] = useState(0);
@@ -66,25 +66,28 @@ export default function CostCalculator({ result }: CostCalculatorProps) {
         </div>
       )}
 
-      {/* Line items */}
-      {result.requiredServices.length > 0 && (
+      {/* Line items — actual purchases (a bundle shows as one line at its bundle price) */}
+      {result.purchases.length > 0 && (
         <div className="mt-5 space-y-2.5 border-t border-zinc-800 pt-4">
-          {result.requiredServices.map((service) => (
-            <div key={service.id} className="flex items-center justify-between">
+          {result.purchases.map((p) => (
+            <div key={p.id} className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div
                   className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: service.brandColor }}
+                  style={{ backgroundColor: getServiceById(p.services[0])?.brandColor ?? '#a1a1aa' }}
                 />
-                <span className="text-sm text-zinc-300">{service.name}</span>
+                <span className="text-sm text-zinc-300">
+                  {p.name}
+                  {p.isBundle && <span className="text-zinc-500"> · bundle</span>}
+                </span>
               </div>
-              <span className="text-sm text-zinc-400">${service.monthlyPrice.toFixed(2)}</span>
+              <span className="text-sm text-zinc-400">${p.monthlyPrice.toFixed(2)}</span>
             </div>
           ))}
         </div>
       )}
 
-      {result.requiredServices.length === 0 && (
+      {result.purchases.length === 0 && (
         <p className="mt-4 text-zinc-600 text-sm">Select shows to see your plan.</p>
       )}
     </div>
