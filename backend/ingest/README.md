@@ -29,7 +29,7 @@ pip install -r requirements.txt
 ## Run Ingestion
 
 ```bash
-python justwatch_ingest.py --country US --language en --count 250 --include-curated
+python justwatch_ingest.py --country US --language en --count 2000 --include-curated --max-attempts 30
 ```
 
 This writes normalized output to:

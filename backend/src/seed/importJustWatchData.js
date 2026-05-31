@@ -7,6 +7,7 @@ const { Show } = require('../models');
 
 const DEFAULT_INPUT_PATH = path.resolve(__dirname, '../../../data/justwatch_shows.json');
 const VALID_TYPES = new Set(['movie', 'series']);
+const TARGET_CATALOG_COUNT = 2000;
 
 function validateRecord(record, index, existingShow) {
   if (!record || typeof record !== 'object') {
@@ -138,7 +139,7 @@ async function importJustWatchData() {
     console.log(`Total shows: ${totalShows}`);
     console.log(`Total usable with posterUrl: ${usableShows}`);
     console.log(`JustWatch usable with posterUrl: ${importedUsableShows}`);
-    console.log(`Catalog target reached: ${usableShows >= 250 ? 'yes' : 'no'} (${usableShows}/250)`);
+    console.log(`Catalog target reached: ${usableShows >= TARGET_CATALOG_COUNT ? 'yes' : 'no'} (${usableShows}/${TARGET_CATALOG_COUNT})`);
   } finally {
     await mongoose.connection.close();
   }

@@ -136,11 +136,11 @@ export const getCurrentUser = () =>
 export const checkHealth = () =>
   req<{ status: string }>('/api/health');
 
-export const getPopularShows = () =>
-  req<BackendShow[]>('/api/shows/popular');
+export const getPopularShows = (limit = 2000) =>
+  req<BackendShow[]>(`/api/shows/popular?limit=${limit}`);
 
 export const searchShows = (q: string, genre?: string, service?: string) => {
-  const p = new URLSearchParams({ limit: '60' });
+  const p = new URLSearchParams({ limit: '2000' });
   if (q) p.set('q', q);
   if (genre && genre !== 'All') p.set('genre', genre.toLowerCase());
   if (service) p.set('service', service);

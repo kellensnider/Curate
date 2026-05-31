@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const { connectDB } = require('../config/db');
 const { Show } = require('../models');
 
+const TARGET_CATALOG_COUNT = 2000;
+
 async function verifyCatalog() {
   if (!process.env.MONGO_URI) {
     console.error('Missing MONGO_URI. Add it to backend/.env before verifying catalog data.');
@@ -54,7 +56,7 @@ async function verifyCatalog() {
         `  - ${show.title} (${show.type}, ${show.year || 'n/a'}) [${(show.services || []).join(', ')}] ${show.posterUrl}`
       );
     }
-    console.log(`Catalog target reached: ${withPoster >= 250 ? 'yes' : 'no'} (${withPoster}/250 poster-backed records)`);
+    console.log(`Catalog target reached: ${withPoster >= TARGET_CATALOG_COUNT ? 'yes' : 'no'} (${withPoster}/${TARGET_CATALOG_COUNT} poster-backed records)`);
   } finally {
     await mongoose.connection.close();
   }

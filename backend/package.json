@@ -13,10 +13,10 @@
     "mcp": "node src/mcp/stdio-server.js",
     "seed": "node src/seed/seedDemoData.js",
     "seed:demo-user": "node src/seed/seedDemoUser.js",
-    "ingest:justwatch": "cd ingest && python justwatch_ingest.py --count 250 --include-curated",
+    "ingest:justwatch": "cd ingest && python justwatch_ingest.py --count 2000 --include-curated --max-attempts 30",
     "import:justwatch": "node src/seed/importJustWatchData.js",
     "refresh:justwatch": "npm run ingest:justwatch && npm run import:justwatch",
-    "ingest:catalog": "cd ingest && python justwatch_ingest.py --count 250 --include-curated",
+    "ingest:catalog": "cd ingest && python justwatch_ingest.py --count 2000 --include-curated --max-attempts 30",
     "import:catalog": "node src/seed/importJustWatchData.js",
     "refresh:catalog": "npm run ingest:catalog && npm run import:catalog",
     "verify:catalog": "node src/seed/verifyCatalog.js"

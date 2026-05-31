@@ -4,7 +4,7 @@ const { Show, serializeShow } = require('../models');
 
 // GET /api/shows?q=breaking+bad&genre=drama&service=netflix
 router.get('/', async (req, res) => {
-  const { q, genre, service, limit = 20 } = req.query;
+  const { q, genre, service, limit = 2000 } = req.query;
   // Only surface poster-backed catalog entries so the UI always shows real art.
   const filter = { posterUrl: { $exists: true, $type: 'string', $ne: '' } };
 
@@ -20,16 +20,17 @@ router.get('/', async (req, res) => {
 
   const results = await Show.find(filter)
     .sort({ priorityWeight: -1, title: 1 })
-    .limit(Number.parseInt(limit, 10) || 20);
+    .limit(Number.parseInt(limit, 10) || 2000);
 
   res.json(results.map(serializeShow));
 });
 
 // GET /api/shows/popular - top shows for onboarding
 router.get('/popular', async (req, res) => {
+  const limit = Number.parseInt(req.query.limit, 10) || 2000;
   const popular = await Show.find({ posterUrl: { $exists: true, $type: 'string', $ne: '' } })
     .sort({ priorityWeight: -1, title: 1 })
-    .limit(20);
+    .limit(limit);
   res.json(popular.map(serializeShow));
 });
 
