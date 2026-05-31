@@ -45,7 +45,13 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 const PROJECT = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
 const REGION = process.env.COMPUTER_USE_REGION || 'global';
 const MODEL = process.env.COMPUTER_USE_MODEL || 'gemini-2.5-computer-use-preview-10-2025';
-const VIEWPORT = { width: 1280, height: 800 };
+// Smaller viewport → smaller PNG → fewer image tokens → faster model inference,
+// so more steps fit inside the (60s on Browserless free) session. 16:10 aspect
+// preserved. Override via env if a flow needs more screen real estate.
+const VIEWPORT = {
+  width: Number(process.env.BROWSER_VIEWPORT_W) || 1024,
+  height: Number(process.env.BROWSER_VIEWPORT_H) || 640,
+};
 
 const auth = new GoogleAuth({ scopes: 'https://www.googleapis.com/auth/cloud-platform' });
 
@@ -210,11 +216,12 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
   // Otherwise launch locally (headed for the live demo).
   let ws = process.env.BROWSER_WS_ENDPOINT;
   const remote = Boolean(ws);
-  // Remote sessions (e.g. Browserless) default to a short timeout that can expire
-  // mid-flow. FORCE a long session timeout — replacing any short value already in
-  // the URL — so longer flows (account deletion) aren't cut off at the last step.
+  // Set the Browserless session timeout to the plan max. NOTE: Browserless free
+  // caps sessions at 60000ms (60s) and REJECTS the connection (400) if you ask
+  // for more — so default to 60000. Override with BROWSER_SESSION_TIMEOUT_MS only
+  // if your plan allows longer.
   if (ws && /browserless/i.test(ws)) {
-    const ms = process.env.BROWSER_SESSION_TIMEOUT_MS || 300000;
+    const ms = process.env.BROWSER_SESSION_TIMEOUT_MS || 60000;
     ws = /[?&]timeout=\d+/i.test(ws)
       ? ws.replace(/([?&]timeout=)\d+/i, `$1${ms}`)
       : ws + (ws.includes('?') ? '&' : '?') + `timeout=${ms}`;
