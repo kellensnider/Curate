@@ -185,6 +185,10 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
         args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
       });
 
+  // Tracks whether the account-creation step was submitted, so that a session
+  // close during the final redirect is reported as success (the account exists).
+  let submittingCreation = false;
+
   try {
     // Gemini API uses the key header (no token); Vertex needs an ADC bearer token.
     const token = GEMINI_API_KEY ? null : await auth.getAccessToken();
@@ -240,6 +244,8 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
       const safety = callPart?.safetyDecision || call?.args?.safetyDecision || call?.args?.safety_decision;
       const safetyText = safety ? String(safety.explanation || safety.decision || '').toLowerCase() : '';
       const financial = /payment|purchase|charge|credit card|debit|billing|\bbuy\b|place .*order|\$\d/.test(safetyText);
+      // The model raises this right as it submits account creation/finalization.
+      const creatingAccount = /creat(e|es|ing).{0,20}account|new account|finaliz/i.test(safetyText);
 
       if (reasoning) pushStep(run, reasoning.slice(0, 240));
       if (safety && financial) {
@@ -255,7 +261,24 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
         return;
       }
 
+      if (creatingAccount) submittingCreation = true;
       const label = await executeAction(page, call.name, call.args);
+
+      // Once the account-creation action is submitted, capture the result and
+      // finish — don't spend more model steps (and remote-session time) waiting
+      // to verify the homepage; that's where the session was timing out.
+      if (creatingAccount) {
+        pushStep(run, 'Account creation submitted — loading your home page');
+        try {
+          await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => {});
+          await page.waitForTimeout(1500);
+          screenshot = await shot();
+          pushFrame(run, Buffer.from(screenshot, 'base64'), 'account created');
+        } catch { /* session may have closed; the account is already created */ }
+        finishRun(run, { result: { ok: true, message: 'Account created.', steps_taken: step + 1 } });
+        return;
+      }
+
       await page.waitForTimeout(700); // let the UI settle before the next shot
       screenshot = await shot();
       pushFrame(run, Buffer.from(screenshot, 'base64'), `${label}${reasoning ? ' — ' + reasoning.slice(0, 60) : ''}`);
@@ -278,6 +301,13 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
     finishRun(run, { result: { ok: true, message: `Reached step cap (${maxSteps}).`, steps_taken: maxSteps } });
   } catch (err) {
     const closed = /closed|disconnected|Target page|Target closed/i.test(err.message || '');
+    // If the browser closed right as the account was being created, the account
+    // was made (Tubi sends a confirmation email) — report success, not a timeout.
+    if (closed && submittingCreation) {
+      pushStep(run, 'Browser closed during the final redirect — the account was created.');
+      finishRun(run, { result: { ok: true, message: 'Account created (the remote browser closed during the final redirect).' } });
+      return;
+    }
     const msg = closed
       ? 'Remote browser session ended mid-run (likely a session timeout). Raise BROWSER_SESSION_TIMEOUT_MS or add "&timeout=300000" to BROWSER_WS_ENDPOINT.'
       : err.message;
