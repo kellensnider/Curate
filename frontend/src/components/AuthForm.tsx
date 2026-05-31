@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/useAuthStore';
+import { useOnboardingStore } from '../store/useOnboardingStore';
 
 type AuthMode = 'login' | 'signup';
 
@@ -41,7 +42,9 @@ export default function AuthForm({ initialMode = 'login' }: AuthFormProps) {
       } else {
         await login(email, password);
       }
-      router.push('/');
+      const normalizedEmail = email.trim().toLowerCase();
+      const hasCompletedOnboarding = useOnboardingStore.getState().isComplete(normalizedEmail);
+      router.push(hasCompletedOnboarding ? '/dashboard' : '/onboarding');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
     }

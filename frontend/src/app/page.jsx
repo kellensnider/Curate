@@ -1,12 +1,10 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { SHOWS, ALL_SERVICES_TOTAL } from '../lib/mockData';
 import { useAuthStore } from '../store/useAuthStore';
-import { useOnboardingStore } from '../store/useOnboardingStore';
 
 const STATS = [
   { value: '$61', label: 'Average household streaming bill / month' },
@@ -16,23 +14,11 @@ const STATS = [
 ];
 
 export default function HomePage() {
-  const router = useRouter();
-  const { isAuthenticated, userEmail } = useAuthStore();
-  const completedEmails = useOnboardingStore((s) => s.completedEmails);
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    // New / not-yet-onboarded accounts go through first-run setup.
-    const onboarded = userEmail && completedEmails.includes(userEmail);
-    router.replace(onboarded ? '/dashboard' : '/onboarding');
-  }, [isAuthenticated, userEmail, completedEmails, router]);
-
+  const { isAuthenticated, userName } = useAuthStore();
   const posters = useMemo(() => {
     const withPosters = SHOWS.filter((s) => s.posterUrl);
     return withPosters.slice(0, 56);
   }, []);
-
-  if (isAuthenticated) return null;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-zinc-950">
@@ -55,20 +41,38 @@ export default function HomePage() {
       <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-transparent to-zinc-950/80" />
 
       <header className="relative z-10 max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
-        <span className="text-white font-black text-2xl tracking-tight">curate</span>
+        <Link href="/" className="text-white font-black text-2xl tracking-tight">
+          curate
+        </Link>
         <div className="flex items-center gap-3">
-          <Link
-            href="/auth?mode=signin"
-            className="text-sm text-zinc-200 hover:text-white px-4 py-2 rounded-lg font-medium transition-colors"
-          >
-            Log in
-          </Link>
-          <Link
-            href="/auth?mode=signup"
-            className="text-sm bg-white hover:bg-zinc-200 text-black px-4 py-2 rounded-lg font-bold transition-colors"
-          >
-            Sign up
-          </Link>
+          {isAuthenticated ? (
+            <>
+              <span className="text-xs text-zinc-400 hidden sm:block">
+                {userName}
+              </span>
+              <Link
+                href="/dashboard"
+                className="text-sm bg-white hover:bg-zinc-200 text-black px-4 py-2 rounded-lg font-bold transition-colors"
+              >
+                Dashboard
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/auth?mode=signin"
+                className="text-sm text-zinc-200 hover:text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/auth?mode=signup"
+                className="text-sm bg-white hover:bg-zinc-200 text-black px-4 py-2 rounded-lg font-bold transition-colors"
+              >
+                Sign up
+              </Link>
+            </>
+          )}
         </div>
       </header>
 
@@ -101,18 +105,37 @@ export default function HomePage() {
           transition={{ delay: 0.3, duration: 0.5 }}
           className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-9"
         >
-          <Link
-            href="/auth?mode=signup"
-            className="w-full sm:w-auto bg-white text-black font-bold text-base px-8 py-3.5 rounded-xl hover:bg-zinc-200 active:scale-95 transition-all"
-          >
-            Get started - it's free
-          </Link>
-          <Link
-            href="/auth?mode=signin"
-            className="w-full sm:w-auto bg-zinc-800/80 backdrop-blur text-white font-semibold text-base px-8 py-3.5 rounded-xl hover:bg-zinc-700 active:scale-95 transition-all"
-          >
-            Log in
-          </Link>
+          {isAuthenticated ? (
+            <>
+              <Link
+                href="/dashboard"
+                className="w-full sm:w-auto bg-white text-black font-bold text-base px-8 py-3.5 rounded-xl hover:bg-zinc-200 active:scale-95 transition-all"
+              >
+                Open Dashboard
+              </Link>
+              <Link
+                href="/browse"
+                className="w-full sm:w-auto bg-zinc-800/80 backdrop-blur text-white font-semibold text-base px-8 py-3.5 rounded-xl hover:bg-zinc-700 active:scale-95 transition-all"
+              >
+                Browse Shows
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link
+                href="/auth?mode=signup"
+                className="w-full sm:w-auto bg-white text-black font-bold text-base px-8 py-3.5 rounded-xl hover:bg-zinc-200 active:scale-95 transition-all"
+              >
+                Get started - it's free
+              </Link>
+              <Link
+                href="/auth?mode=signin"
+                className="w-full sm:w-auto bg-zinc-800/80 backdrop-blur text-white font-semibold text-base px-8 py-3.5 rounded-xl hover:bg-zinc-700 active:scale-95 transition-all"
+              >
+                Log in
+              </Link>
+            </>
+          )}
         </motion.div>
 
         <motion.div

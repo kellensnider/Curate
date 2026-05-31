@@ -5,10 +5,14 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 
+const HOME_ROUTE = '/';
+const DASHBOARD_ROUTE = '/dashboard';
+
+// Home routes to the public landing page; Dashboard routes to the authenticated dashboard experience.
 const NAV_LINKS = [
-  { href: '/', label: 'Home' },
+  { href: HOME_ROUTE, label: 'Home' },
   { href: '/browse', label: 'Browse' },
-  { href: '/dashboard', label: 'Dashboard' },
+  { href: DASHBOARD_ROUTE, label: 'Dashboard' },
   { href: '/my-list', label: 'My List' },
   { href: '/profile', label: 'Profile' },
 ];
@@ -24,13 +28,13 @@ export default function Navbar() {
 
   async function handleSignOut() {
     await signOut();
-    router.push('/');
+    router.push(HOME_ROUTE);
   }
 
   return (
     <nav className="sticky top-0 z-40 bg-zinc-950/80 backdrop-blur-md border-b border-zinc-800/60">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center gap-4">
-        <Link href="/" className="text-white font-black text-xl tracking-tight shrink-0">
+        <Link href={HOME_ROUTE} className="text-white font-black text-xl tracking-tight shrink-0">
           curate
         </Link>
 
