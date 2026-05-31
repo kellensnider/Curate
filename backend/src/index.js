@@ -1,4 +1,5 @@
 require('dotenv').config();
+const path = require('path');
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
@@ -7,6 +8,7 @@ const authRoutes = require('./api/auth');
 const showsRouter = require('./api/shows');
 const watchlistRouter = require('./api/watchlist');
 const subscriptionsRouter = require('./api/subscriptions');
+const automationRouter = require('./api/automation');
 const { runAgentStream } = require('./agent/index');
 const { connectDB } = require('./config/db');
 const { requireAuth } = require('./middleware/auth');
@@ -28,6 +30,10 @@ app.use('/api/auth', authRoutes);
 app.use('/api/shows', showsRouter);
 app.use('/api/watchlist', watchlistRouter);
 app.use('/api/subscriptions', subscriptionsRouter);
+app.use('/api/automation', automationRouter);
+
+// Debug screenshots from automation runs (testing only).
+app.use('/screenshots', express.static(path.join(__dirname, '../screenshots')));
 
 // Agent chat streaming SSE endpoint
 app.post('/api/agent/chat', requireAuth, async (req, res) => {
