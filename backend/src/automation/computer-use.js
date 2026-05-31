@@ -225,9 +225,23 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
       contents.push({ role: 'model', parts });
 
       const reasoning = parts.filter((p) => p.text).map((p) => p.text).join(' ').trim();
-      const call = parts.find((p) => p.functionCall)?.functionCall;
+      const callPart = parts.find((p) => p.functionCall);
+      const call = callPart?.functionCall;
+      // Gemini Computer Use can attach a "safety decision" to an action that must
+      // be acknowledged in the function response to proceed. We only acknowledge
+      // benign signup confirmations; anything that looks financial halts the run
+      // for a human (we never auto-confirm a payment/charge).
+      const safety = callPart?.safetyDecision || call?.args?.safetyDecision || call?.args?.safety_decision;
+      const safetyText = safety ? String(safety.explanation || safety.decision || '').toLowerCase() : '';
+      const financial = /payment|purchase|charge|credit card|debit|billing|\bbuy\b|place .*order|\$\d/.test(safetyText);
 
       if (reasoning) pushStep(run, reasoning.slice(0, 240));
+      if (safety && financial) {
+        pushStep(run, `Halted at a payment-related safety check (not auto-confirmed): ${safetyText.slice(0, 140)}`);
+        finishRun(run, { result: { ok: false, message: 'Stopped before a payment/charge action — safety check not auto-confirmed.' } });
+        return;
+      }
+      if (safety) pushStep(run, `Safety check acknowledged: ${safetyText.slice(0, 120) || 'confirm action'}`);
 
       // No action → the model considers the task done (or is just narrating).
       if (!call) {
@@ -246,7 +260,9 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
         parts: [{
           functionResponse: {
             name: call.name,
-            response: { url: page.url() },
+            // Only acknowledge when the model raised a (non-financial) safety
+            // decision for this action — financial ones already halted above.
+            response: { url: page.url(), ...(safety ? { safety_acknowledgement: 'true' } : {}) },
             parts: [{ inlineData: { mimeType: 'image/png', data: screenshot } }],
           },
         }],
