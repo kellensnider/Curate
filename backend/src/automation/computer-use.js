@@ -225,6 +225,15 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
     ws = /[?&]timeout=\d+/i.test(ws)
       ? ws.replace(/([?&]timeout=)\d+/i, `$1${ms}`)
       : ws + (ws.includes('?') ? '&' : '?') + `timeout=${ms}`;
+
+    // Run Browserless headless (no GUI render → faster screenshots/steps) unless
+    // BROWSER_HEADLESS=false. Replace an explicit headless=false, else append.
+    // An unrecognized flag is ignored by Browserless, so this is safe.
+    if (process.env.BROWSER_HEADLESS !== 'false') {
+      ws = /[?&]headless=(true|false)/i.test(ws)
+        ? ws.replace(/([?&]headless=)(?:true|false)/i, '$1true')
+        : ws + (ws.includes('?') ? '&' : '?') + 'headless=true';
+    }
   }
   const headless = process.env.AUTOMATION_HEADLESS !== 'false';
   const slowMo = Number(process.env.BROWSER_SLOWMO) || 0;
