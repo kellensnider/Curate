@@ -221,6 +221,34 @@ async function fillBirthIfPresent(page, steps) {
   if (n > 0) steps.push('Filled profile selects');
 }
 
+// Tubi's actual 2nd sign-up step: Age + Gender (custom dropdown) -> Continue.
+async function completeTubiAgeGender(page, steps) {
+  const ageField = page.locator('#age-field, input[name="age"]').first();
+  if (!(await ageField.isVisible({ timeout: 4000 }).catch(() => false))) return false;
+
+  await ageField.fill('30').catch(() => {});
+
+  // Gender is a custom dropdown, not a <select>.
+  const genderTrigger = page.locator('.web-dropdown--input').first();
+  if (await genderTrigger.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await genderTrigger.click().catch(() => {});
+    await page.waitForTimeout(400);
+    const option = page
+      .locator('#web-dropdown-option-0-gender, #web-dropdown-options-gender li[role="option"]')
+      .first();
+    await option.click({ timeout: 2000 }).catch(() => {});
+  }
+  steps.push('Entered age & gender');
+
+  const cont = page.locator('button:has-text("Continue"), button[type="submit"]').first();
+  if (await cont.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await cont.click().catch(() => {});
+    steps.push('Submitted age & gender');
+    await page.waitForTimeout(3000);
+  }
+  return true;
+}
+
 // Create a brand-new Tubi account. Returns { ok, reason }.
 async function registerTubi(page, { firstName, email, password }, steps) {
   steps.push('Opening Tubi sign-up');
@@ -244,16 +272,20 @@ async function registerTubi(page, { firstName, email, password }, steps) {
     return { ok: false, reason: 'exists' };
   }
 
-  // Optional 2nd step (date of birth, etc.) then a final submit.
-  await fillBirthIfPresent(page, steps);
-  const finalBtn = page
-    .locator(
-      'button:has-text("Sign Up"), button:has-text("Create"), button:has-text("Continue"), button:has-text("Done"), button:has-text("Next"), button[type="submit"]',
-    )
-    .first();
-  if (await finalBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
-    steps.push('Completing sign-up');
-    await finalBtn.click().catch(() => {});
+  // Step 2 is Tubi's Age + Gender screen; handle it specifically.
+  const did2 = await completeTubiAgeGender(page, steps);
+  if (!did2) {
+    // Fallback for any other 2nd-step shape (date of birth, etc.).
+    await fillBirthIfPresent(page, steps);
+    const finalBtn = page
+      .locator(
+        'button:has-text("Sign Up"), button:has-text("Create"), button:has-text("Continue"), button:has-text("Done"), button:has-text("Next"), button[type="submit"]',
+      )
+      .first();
+    if (await finalBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+      steps.push('Completing sign-up');
+      await finalBtn.click().catch(() => {});
+    }
   }
 
   const loggedIn = await isLoggedIn(page);
