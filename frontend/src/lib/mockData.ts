@@ -339,12 +339,14 @@ export interface WatchPlan {
   months: MonthPlan[];
   /** Sum of every month's plan cost (what finishing the list will cost). */
   totalCost: number;
-  /** Titles scheduled to be watched across the whole plan. */
+  /** Titles scheduled to be watched across the paid plan. */
   totalShows: number;
   /** Months needed to clear the (coverable) watchlist, capped by the horizon. */
   monthsToFinish: number;
   /** Watchlist titles no affordable plan within the horizon ever reaches. */
   unreachable: Show[];
+  /** Titles already free via an infinite membership — watchable anytime, $0. */
+  freeShows: Show[];
 }
 
 export interface MultiMonthOptions extends OptimizeOptions {
@@ -375,18 +377,26 @@ export function planMultiMonth(
     maxMonthlyCost = Infinity,
     horizon = 6,
     watchedIds = [],
-    infiniteServiceIds,
+    infiniteServiceIds = [],
     baselineMonthlyCost,
     baselineSubscriptions,
   } = options;
 
   const byId = new Map(pool.map((s) => [s.id, s]));
   const watched = new Set(watchedIds);
+  const infiniteServices = new Set(infiniteServiceIds);
   // Ranked (most-wanted first), unwatched, resolvable titles.
-  let remaining = rankedShowIds
+  const unwatched = rankedShowIds
     .filter((id) => !watched.has(id))
     .map((id) => byId.get(id))
     .filter((s): s is Show => Boolean(s));
+
+  // Titles already covered by an infinite ($0) membership are free to watch
+  // anytime — pull them out of the paid backlog entirely (the user asked us to
+  // treat those services and their shows as already accounted for).
+  const isFree = (s: Show) => s.streamingServices.some((svc) => infiniteServices.has(svc));
+  const freeShows = unwatched.filter(isFree);
+  let remaining = unwatched.filter((s) => !isFree(s));
 
   const months: MonthPlan[] = [];
   const perMonth = Math.max(1, Math.floor(showsPerMonth));
@@ -429,5 +439,6 @@ export function planMultiMonth(
     monthsToFinish: months.length,
     // Whatever's left once we stop is unreachable within budget/horizon.
     unreachable: remaining,
+    freeShows,
   };
 }
