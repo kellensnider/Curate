@@ -26,6 +26,12 @@ const { startDemoRun, startComputerUseRun } = require('../automation/demo');
 const { getRun, listRuns } = require('../automation/runs');
 
 const DEMO_SERVICES = ['netflix', 'disney', 'hulu', 'max', 'tubi'];
+// Bundles are a SINGLE purchase the computer-use agent makes through one host
+// platform (the Disney bundles are bought via Disney+). They're valid targets
+// for /agent only — the scripted /demo runner has no per-bundle flow. Keyed by
+// the same bundle ids the frontend uses (see mockData BUNDLES / demo.js).
+const BUNDLE_IDS = ['disney_hulu', 'disney_hulu_max'];
+const AGENT_TARGETS = [...DEMO_SERVICES, ...BUNDLE_IDS];
 
 // POST /api/automation/demo  { service, action?, password?, payment_method? }
 // Starts a real headed/headless browser run and returns a runId immediately.
@@ -61,8 +67,8 @@ router.post('/agent', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Automation is disabled. Set AUTOMATION_ENABLED=true (testing only).' });
   }
   const { service, password, action = 'subscribe' } = req.body || {};
-  if (!DEMO_SERVICES.includes(service)) {
-    return res.status(400).json({ error: `service must be one of: ${DEMO_SERVICES.join(', ')}` });
+  if (!AGENT_TARGETS.includes(service)) {
+    return res.status(400).json({ error: `service must be one of: ${AGENT_TARGETS.join(', ')}` });
   }
   if (!['subscribe', 'unsubscribe'].includes(action)) {
     return res.status(400).json({ error: 'action must be "subscribe" or "unsubscribe"' });

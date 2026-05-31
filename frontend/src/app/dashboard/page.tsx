@@ -229,8 +229,24 @@ export default function DashboardPage() {
     // Snapshot the change set so the post-apply prompts have a stable list
     // (activeServiceIds shifts once applied; the cancel prompt only covers
     // accounts Curate created, captured here so the list can't reshape mid-run).
-    setJustActivated(toActivate);
-    setJustCancelled(toCancel.filter((id) => createdAccounts.includes(id)));
+    //
+    // Collapse newly-activated services into the plan purchase that grants them,
+    // so a bundle is set up as ONE account (through its host platform) instead of
+    // one signup per constituent service. Single services map to themselves.
+    const setupPurchases = (scheduledPlan ?? current)?.purchases ?? [];
+    setJustActivated(
+      setupPurchases
+        .filter((p) => p.services.some((svc) => toActivate.includes(svc)))
+        .map((p) => p.id),
+    );
+    // Cancel only the accounts Curate created whose services are being dropped. A
+    // bundle account (tracked by its bundle id) is cancelled once, via its host.
+    setJustCancelled(
+      createdAccounts.filter((optId) => {
+        const opt = getOptionById(optId);
+        return !!opt && opt.services.some((svc) => toCancel.includes(svc));
+      }),
+    );
     try {
       await applyPlan(toActivate, toCancel);
       if (scheduledIds) clearSchedule();

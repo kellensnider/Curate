@@ -9,14 +9,17 @@ import {
 } from '../../lib/api';
 import { useCreatedAccountsStore } from '../../store/useCreatedAccountsStore';
 
-// Services the computer-use agent can set up. Others (e.g. appletv, peacock)
-// are skipped with a note.
+// Purchases the computer-use agent can set up — individual services plus the
+// bundles (a bundle is ONE account through its host platform, not one signup per
+// service). Others (e.g. appletv, peacock) are skipped with a note.
 const SUPPORTED: Record<string, string> = {
   tubi: 'Tubi',
   netflix: 'Netflix',
   disney: 'Disney+',
   hulu: 'Hulu',
   max: 'Max',
+  disney_hulu: 'Disney+ & Hulu bundle',
+  disney_hulu_max: 'Disney+, Hulu & Max bundle',
 };
 
 const POLL_MS = 1000;

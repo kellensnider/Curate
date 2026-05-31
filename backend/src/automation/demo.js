@@ -59,6 +59,27 @@ const LOGIN_URLS = {
   max: 'https://www.max.com/login',
 };
 
+// Multi-service bundles are bought as ONE purchase through a single host platform
+// (both Disney bundles are purchased via Disney+), NOT as a separate signup per
+// constituent service. Keyed by the same bundle ids the frontend uses
+// (see frontend mockData BUNDLES).
+const BUNDLE_PRESETS = {
+  disney_hulu: {
+    host: 'Disney+',
+    description: 'the Disney+ and Hulu bundle',
+    includes: 'Disney+ and Hulu',
+    signupUrl: 'https://www.disneyplus.com/sign-up',
+    loginUrl: LOGIN_URLS.disney,
+  },
+  disney_hulu_max: {
+    host: 'Disney+',
+    description: 'the Disney+, Hulu and Max bundle',
+    includes: 'Disney+, Hulu and Max',
+    signupUrl: 'https://www.disneyplus.com/sign-up',
+    loginUrl: LOGIN_URLS.disney,
+  },
+};
+
 function computerUsePreset(service, { email, password, action = 'subscribe', card = null }) {
   const creds = `Use email "${email}" and password "${password}".`;
   // First name defaults to the email's local part (before "@"), letters only.
@@ -71,6 +92,36 @@ function computerUsePreset(service, { email, password, action = 'subscribe', car
   const paymentInstruction = cardInfo
     ? cardInfo
     : 'STOP as soon as you reach the payment / credit-card screen. Do NOT enter any payment details and do NOT submit. Reaching the payment screen IS success — report that you reached it.';
+
+  // ── Bundles: ONE purchase through a single host platform (the Disney bundles
+  // are bought via Disney+), NOT a separate signup per constituent service. ────
+  const bundle = BUNDLE_PRESETS[service];
+  if (bundle) {
+    if (action === 'unsubscribe') {
+      return {
+        startUrl: bundle.loginUrl,
+        goal: [
+          `Sign in with the email and password, then cancel ${bundle.description}.`,
+          `${creds}`,
+          'Sign in with email (NOT Google/Apple). Go to Account settings and cancel the bundle / subscription — this single cancellation drops every service the bundle includes.',
+          'Proceed through the cancellation confirmation until it is cancelled. Do NOT enter any payment details.',
+          'If a CAPTCHA or verification blocks progress, stop and report it.',
+        ].join(' '),
+      };
+    }
+    return {
+      startUrl: bundle.signupUrl,
+      goal: [
+        `Sign up for ${bundle.description}. This is a SINGLE purchase through ${bundle.host} that includes all of its services — do NOT create separate accounts for each service.`,
+        `${creds} If a name is requested, use "${firstName}".`,
+        `On the plan-selection screen, choose the bundle option that includes ${bundle.includes} (pick the cheapest "with ads" tier).`,
+        'When you reach the payment / credit-card screen:',
+        paymentInstruction,
+        'Never click any final "Start"/"Subscribe"/submit/charge button.',
+        'If a CAPTCHA or human-verification check blocks progress, stop and report it.',
+      ].join(' '),
+    };
+  }
 
   // ── Cancel / delete an account Curate created earlier ──────────────────────
   if (action === 'unsubscribe') {
