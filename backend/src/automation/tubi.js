@@ -164,12 +164,15 @@ async function runTubiAction({ action, email, password }) {
     const acquired = await acquireBrowser(chromium);
     browser = acquired.browser;
     if (acquired.remote) steps.push('Connected to remote browser');
-    const context = await browser.newContext({
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      viewport: { width: 1280, height: 800 },
-    });
-    const page = await context.newPage();
+    // Reuse the default context when connecting over CDP; otherwise create one.
+    const context =
+      browser.contexts()[0] ||
+      (await browser.newContext({
+        userAgent:
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        viewport: { width: 1280, height: 800 },
+      }));
+    const page = context.pages()[0] || (await context.newPage());
 
     steps.push('Opening Tubi sign-in');
     await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
