@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { SERVICES, ALL_SERVICES_TOTAL, type WatchPlan } from '../../lib/mockData';
 
 interface MonthByMonthPlanProps {
@@ -18,13 +17,12 @@ function monthLabel(monthIndex: number): string {
 }
 
 /**
- * A month-by-month subscription schedule: each month shows which services to
- * hold, what it costs, and the titles you'll finish — assuming you complete
- * your monthly quota before moving on.
+ * A month-by-month forecast laid out as side-by-side columns — one per month
+ * out to the 6-month horizon (or until the watchlist is finished). Each column
+ * shows the services you'll be subscribed to that month and poster art for the
+ * titles you'll watch, assuming you finish your monthly quota before moving on.
  */
 export default function MonthByMonthPlan({ plan }: MonthByMonthPlanProps) {
-  const [open, setOpen] = useState<number | null>(0);
-
   if (plan.months.length === 0) return null;
 
   // What buying every service for the same number of months would cost.
@@ -53,88 +51,83 @@ export default function MonthByMonthPlan({ plan }: MonthByMonthPlanProps) {
         )}
       </p>
 
-      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden divide-y divide-zinc-800/60">
-        {plan.months.map((m) => {
-          const isOpen = open === m.monthIndex;
-          return (
-            <div key={m.monthIndex}>
-              <button
-                onClick={() => setOpen(isOpen ? null : m.monthIndex)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-zinc-800/40 transition-colors"
-              >
-                <span className="w-20 sm:w-28 shrink-0 text-sm font-semibold text-white">
-                  {monthLabel(m.monthIndex)}
-                </span>
-
-                {/* Service chips for the month */}
-                <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
-                  {m.plan.purchases.length === 0 ? (
-                    <span className="text-xs text-zinc-500">No subscription</span>
-                  ) : (
-                    m.plan.purchases.map((p) => {
-                      const color =
-                        SERVICES.find((s) => s.id === p.services[0])?.brandColor ?? '#52525b';
-                      return (
-                        <span
-                          key={p.id}
-                          className="text-xs font-semibold px-2 py-0.5 rounded-full border"
-                          style={{ color, borderColor: `${color}66` }}
-                        >
-                          {p.name}
-                        </span>
-                      );
-                    })
-                  )}
-                </div>
-
-                <span className="shrink-0 text-sm font-bold text-white tabular-nums">
+      {/* Horizontal forecast: a column per month, scrollable on narrow screens. */}
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
+        {plan.months.map((m, i) => (
+          <motion.div
+            key={m.monthIndex}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: i * 0.05 }}
+            className="snap-start shrink-0 w-44 sm:w-48 bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden flex flex-col"
+          >
+            {/* Month header: label, cost, title count */}
+            <div className="px-3.5 pt-3.5 pb-3 border-b border-zinc-800/60">
+              <p className="text-sm font-bold text-white">{monthLabel(m.monthIndex)}</p>
+              <div className="flex items-baseline justify-between mt-0.5">
+                <span className="text-base font-bold text-emerald-400 tabular-nums">
                   ${m.plan.monthlyTotal.toFixed(2)}
+                  <span className="text-xs text-zinc-500 font-normal">/mo</span>
                 </span>
-                <span className="shrink-0 text-xs text-zinc-500 w-14 text-right">
+                <span className="text-xs text-zinc-500">
                   {m.watch.length} {m.watch.length === 1 ? 'title' : 'titles'}
                 </span>
-                <svg
-                  className={`shrink-0 text-zinc-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                >
-                  <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-
-              <AnimatePresence initial={false}>
-                {isOpen && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="px-4 pb-4 flex gap-2 flex-wrap">
-                      {m.watch.map((show) => (
-                        <div
-                          key={show.id}
-                          className="rounded-lg overflow-hidden shrink-0"
-                          style={{ width: 46, height: 69 }}
-                          title={show.title}
-                        >
-                          <img
-                            src={show.posterUrl}
-                            alt={show.title}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              </div>
             </div>
-          );
-        })}
+
+            {/* Services you'll be subscribed to this month */}
+            <div className="px-3.5 py-3 border-b border-zinc-800/60">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2">
+                Subscribed to
+              </p>
+              {m.plan.purchases.length === 0 ? (
+                <span className="text-xs text-zinc-500">No subscription</span>
+              ) : (
+                <div className="flex flex-col gap-1.5">
+                  {m.plan.purchases.map((p) => {
+                    const color =
+                      SERVICES.find((s) => s.id === p.services[0])?.brandColor ?? '#52525b';
+                    return (
+                      <span key={p.id} className="flex items-center gap-2 text-xs font-semibold text-white">
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: color }}
+                        />
+                        {p.name}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Posters of the shows you'll watch this month */}
+            <div className="px-3.5 py-3 flex-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2">
+                You&apos;ll watch
+              </p>
+              {m.watch.length === 0 ? (
+                <span className="text-xs text-zinc-500">Nothing scheduled</span>
+              ) : (
+                <div className="grid grid-cols-3 gap-1.5">
+                  {m.watch.map((show) => (
+                    <div
+                      key={show.id}
+                      className="rounded-md overflow-hidden aspect-[2/3] bg-zinc-800"
+                      title={show.title}
+                    >
+                      <img
+                        src={show.posterUrl}
+                        alt={show.title}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        ))}
       </div>
 
       {plan.unreachable.length > 0 && (
