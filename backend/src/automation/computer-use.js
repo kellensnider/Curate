@@ -196,6 +196,31 @@ async function executeAction(page, name, args) {
   }
 }
 
+// Create a Browserbase session and return a connected browser. Browserbase runs
+// headless by default, allows long sessions, and (with proxies) routes through a
+// residential IP — which gets past datacenter-IP bot-detection (e.g. Disney).
+async function acquireBrowserbase(chromium) {
+  const apiKey = process.env.BROWSERBASE_API_KEY;
+  const projectId = process.env.BROWSERBASE_PROJECT_ID;
+  if (!projectId) throw new Error('BROWSERBASE_PROJECT_ID is not set');
+
+  const res = await fetch('https://api.browserbase.com/v1/sessions', {
+    method: 'POST',
+    headers: { 'X-BB-API-Key': apiKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId,
+      // Residential proxy defeats datacenter-IP blocks; disable with BROWSERBASE_PROXIES=false.
+      proxies: process.env.BROWSERBASE_PROXIES !== 'false',
+      browserSettings: { viewport: { width: VIEWPORT.width, height: VIEWPORT.height } },
+    }),
+  });
+  const session = await res.json().catch(() => ({}));
+  if (!res.ok || !session.connectUrl) {
+    throw new Error(`Browserbase session failed: ${session.message || session.error || res.status}`);
+  }
+  return chromium.connectOverCDP(session.connectUrl);
+}
+
 /**
  * Run the agent until the model stops issuing actions, the step cap is hit, or
  * an error occurs. Streams reasoning + screenshots into `run`.
@@ -211,45 +236,40 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
     return;
   }
 
-  // Remote browser (e.g. Browserbase) when BROWSER_WS_ENDPOINT is set — so a
-  // host that can't run Chromium (Render free) still drives a real browser.
-  // Otherwise launch locally (headed for the live demo).
-  let ws = process.env.BROWSER_WS_ENDPOINT;
-  const remote = Boolean(ws);
-  // Set the Browserless session timeout to the plan max. NOTE: Browserless free
-  // caps sessions at 60000ms (60s) and REJECTS the connection (400) if you ask
-  // for more — so default to 60000. Override with BROWSER_SESSION_TIMEOUT_MS only
-  // if your plan allows longer.
-  if (ws && /browserless/i.test(ws)) {
-    const ms = process.env.BROWSER_SESSION_TIMEOUT_MS || 60000;
-    ws = /[?&]timeout=\d+/i.test(ws)
-      ? ws.replace(/([?&]timeout=)\d+/i, `$1${ms}`)
-      : ws + (ws.includes('?') ? '&' : '?') + `timeout=${ms}`;
-
-    // Run Browserless headless (no GUI render → faster screenshots/steps) unless
-    // BROWSER_HEADLESS=false. Browserless v2 takes launch options as a `launch`
-    // JSON query param (the v1 `headless=` flag is ignored). Force "headless":true
-    // inside an existing launch param, else append a fresh one.
-    if (process.env.BROWSER_HEADLESS !== 'false') {
-      if (/[?&]launch=/i.test(ws)) {
-        ws = ws
-          .replace(/("headless"\s*:\s*)false/gi, '$1true')
-          .replace(/(%22headless%22%3A)false/gi, '$1true');
-      } else {
-        ws += (ws.includes('?') ? '&' : '?') + 'launch=' + encodeURIComponent('{"headless":true}');
+  // Browser acquisition, in priority order:
+  //  1. Browserbase  (BROWSERBASE_API_KEY) — headless, residential proxy, long sessions
+  //  2. Browserless  (BROWSER_WS_ENDPOINT) — remote, but headless via CDP is fixed at launch
+  //  3. Local Chromium — when no remote endpoint (headed demo on a laptop)
+  let browser;
+  let remote = false;
+  if (process.env.BROWSERBASE_API_KEY) {
+    browser = await acquireBrowserbase(chromium);
+    remote = true;
+  } else {
+    let ws = process.env.BROWSER_WS_ENDPOINT;
+    remote = Boolean(ws);
+    // Browserless free caps sessions at 60000ms (60s) and REJECTS the connection
+    // (400) if you ask for more — so default to 60000.
+    if (ws && /browserless/i.test(ws)) {
+      const ms = process.env.BROWSER_SESSION_TIMEOUT_MS || 60000;
+      ws = /[?&]timeout=\d+/i.test(ws)
+        ? ws.replace(/([?&]timeout=)\d+/i, `$1${ms}`)
+        : ws + (ws.includes('?') ? '&' : '?') + `timeout=${ms}`;
+      if (process.env.BROWSER_HEADLESS !== 'false') {
+        ws = /[?&]launch=/i.test(ws)
+          ? ws.replace(/("headless"\s*:\s*)false/gi, '$1true').replace(/(%22headless%22%3A)false/gi, '$1true')
+          : ws + (ws.includes('?') ? '&' : '?') + 'launch=' + encodeURIComponent('{"headless":true}');
       }
     }
+    const headless = process.env.AUTOMATION_HEADLESS !== 'false';
+    const slowMo = Number(process.env.BROWSER_SLOWMO) || 0;
+    browser = remote
+      ? (process.env.BROWSER_CDP === 'true' ? await chromium.connectOverCDP(ws) : await chromium.connect(ws))
+      : await chromium.launch({
+          headless, slowMo,
+          args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
+        });
   }
-  const headless = process.env.AUTOMATION_HEADLESS !== 'false';
-  const slowMo = Number(process.env.BROWSER_SLOWMO) || 0;
-  // Match tubi.js: default to Playwright-protocol connect (Browserless), opt into
-  // CDP with BROWSER_CDP=true (Browserbase). Local launch when no endpoint.
-  const browser = remote
-    ? (process.env.BROWSER_CDP === 'true' ? await chromium.connectOverCDP(ws) : await chromium.connect(ws))
-    : await chromium.launch({
-        headless, slowMo,
-        args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
-      });
 
   // Tracks whether the account-creation step was submitted, so that a session
   // close during the final redirect is reported as success (the account exists).

@@ -22,13 +22,21 @@ services:
         sync: false
       # ── Computer-use agent (Gemini 2.5 Computer Use) ──
       # Render free-native can't run Chromium, so the agent drives a REMOTE
-      # browser via BROWSER_WS_ENDPOINT (Browserless = Playwright connect;
-      # Browserbase = set BROWSER_CDP=true). Set sync:false secrets in dashboard.
+      # browser. RECOMMENDED: Browserbase (headless, residential proxy that beats
+      # bot-detection like Disney, long sessions). Set sync:false secrets in dash.
       - key: AUTOMATION_ENABLED
         value: "true"
-      - key: BROWSER_WS_ENDPOINT
-        sync: false # Browserless wss URL (with token), or Browserbase CDP URL
-      # - key: BROWSER_CDP            # set to "true" only for Browserbase (CDP)
+      #  Browserbase (preferred — takes priority if set):
+      - key: BROWSERBASE_API_KEY
+        sync: false # from browserbase.com dashboard
+      - key: BROWSERBASE_PROJECT_ID
+        sync: false # from browserbase.com dashboard
+      # - key: BROWSERBASE_PROXIES   # residential proxy on by default; "false" to disable
+      #   value: "false"
+      #  OR Browserless (fallback; 60s session cap, headless via CDP not settable):
+      # - key: BROWSER_WS_ENDPOINT
+      #   sync: false
+      # - key: BROWSER_CDP
       #   value: "true"
       # Auth — pick ONE:
       #  (A) Gemini API key (recommended; no service-account key needed):
