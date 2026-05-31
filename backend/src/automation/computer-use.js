@@ -257,7 +257,9 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
       ws = /[?&]timeout=\d+/i.test(ws)
         ? ws.replace(/([?&]timeout=)\d+/i, `$1${ms}`)
         : ws + (ws.includes('?') ? '&' : '?') + `timeout=${ms}`;
-      if (process.env.BROWSER_HEADLESS !== 'false') {
+      // Browserless runs HEADFUL by default (better for bot-detection, and the
+      // headless flag is ignored over CDP anyway). Only force headless if opted in.
+      if (process.env.BROWSER_HEADLESS === 'true') {
         ws = /[?&]launch=/i.test(ws)
           ? ws.replace(/("headless"\s*:\s*)false/gi, '$1true').replace(/(%22headless%22%3A)false/gi, '$1true')
           : ws + (ws.includes('?') ? '&' : '?') + 'launch=' + encodeURIComponent('{"headless":true}');
