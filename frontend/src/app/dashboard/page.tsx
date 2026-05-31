@@ -288,16 +288,16 @@ export default function DashboardPage() {
   const annualRows = rows.filter((r) => r.annual && r.monthsLeft !== null);
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen" style={{ position: 'relative' }}>
       <Navbar />
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-6xl mx-auto" style={{ paddingLeft: 24, paddingRight: 24, paddingBottom: 40 }}>
         {/* Header */}
-        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-          <h1 className="text-3xl font-black text-white">
+        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-6" style={{ paddingTop: 28 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'white', margin: 0 }}>
             {userName ? `Hi ${userName.split(' ')[0]} — ` : ''}Dashboard
           </h1>
-          <p className="text-zinc-400 text-sm mt-1">
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.38)', marginTop: 4, marginBottom: 18 }}>
             Audit your plan, schedule next month, or apply changes now.
           </p>
         </motion.div>
@@ -308,15 +308,11 @@ export default function DashboardPage() {
         )}
 
         {/* This-month summary */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
           <SummaryStat label="Active services" value={activeSubs.length.toString()} />
           <SummaryStat label="Monthly spend" value={`$${currentMonthly.toFixed(2)}`} />
           <SummaryStat label="Shows in list" value={watchlistShows.length.toString()} />
-          <SummaryStat
-            label="Budget · pace"
-            value={`$${maxMonthlyCost} · ${showsPerMonth}/mo`}
-            small
-          />
+          <SummaryStat label="Budget · pace" value={`$${maxMonthlyCost} · ${showsPerMonth}/mo`} small />
         </div>
 
         {/* Set up current subscriptions prompt */}
@@ -342,21 +338,48 @@ export default function DashboardPage() {
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="mb-6 p-4 bg-blue-950/30 border border-blue-900/50 rounded-2xl flex flex-wrap items-center justify-between gap-3"
+              style={{
+                marginBottom: 24,
+                background: 'rgba(55,138,221,0.1)',
+                border: '0.5px solid rgba(55,138,221,0.22)',
+                borderRadius: 10,
+                padding: '11px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'nowrap',
+              }}
             >
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
-                <p className="text-sm text-blue-100 min-w-0">
-                  <span className="font-semibold">Scheduled for next month</span> ·{' '}
-                  {scheduledPlan.purchases.map((p) => p.name).join(' + ') || 'no services'} · takes
-                  effect {new Date(effectiveDate).toLocaleDateString()}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                <div
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: '50%',
+                    background: '#378ADD',
+                    flexShrink: 0,
+                  }}
+                />
+                <p style={{ fontSize: 13, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ color: 'white', fontWeight: 600 }}>Scheduled for next month</span>
+                  <span style={{ color: 'rgba(255,255,255,0.75)' }}>
+                    {' '}·{' '}{scheduledPlan.purchases.map((p) => p.name).join(' + ') || 'no services'} · takes effect {new Date(effectiveDate).toLocaleDateString()}
+                  </span>
                 </p>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, marginLeft: 12 }}>
                 <button
                   onClick={applyNow}
                   disabled={applying}
-                  className="text-xs font-semibold text-blue-300 hover:text-blue-200 disabled:opacity-50"
+                  style={{
+                    fontSize: 13,
+                    color: '#378ADD',
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    padding: 0,
+                    opacity: applying ? 0.5 : 1,
+                  }}
                 >
                   {applying ? 'Applying…' : 'Apply now'}
                 </button>
@@ -364,7 +387,7 @@ export default function DashboardPage() {
                   onClick={clearSchedule}
                   className="text-xs text-zinc-500 hover:text-red-400 transition-colors"
                 >
-                  Cancel schedule
+                  Cancel
                 </button>
               </div>
             </motion.div>
@@ -674,9 +697,16 @@ function SummaryStat({
   small?: boolean;
 }) {
   return (
-    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-      <p className={`font-black text-white ${small ? 'text-base' : 'text-2xl'}`}>{value}</p>
-      <p className="text-zinc-500 text-xs mt-1">{label}</p>
+    <div
+      style={{
+        background: '#181818',
+        border: '0.5px solid rgba(255,255,255,0.08)',
+        borderRadius: 10,
+        padding: '12px 16px',
+      }}
+    >
+      <p style={{ fontSize: small ? 16 : 20, fontWeight: 500, color: 'white', margin: 0 }}>{value}</p>
+      <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.32)', margin: '4px 0 0' }}>{label}</p>
     </div>
   );
 }

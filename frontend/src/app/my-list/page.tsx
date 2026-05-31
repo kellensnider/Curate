@@ -53,7 +53,7 @@ export default function MyListPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ background: '#0e0e0e' }}>
+    <div className="min-h-screen" style={{ position: 'relative' }}>
       <Navbar />
 
       <div className="max-w-6xl mx-auto px-6">

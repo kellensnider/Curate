@@ -50,22 +50,27 @@ export default function BrowsePage() {
     : `No ${activeGenre !== 'All' ? activeGenre.toLowerCase() + ' ' : ''}shows found.`;
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen" style={{ position: 'relative' }}>
       <Navbar />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+      <div className="max-w-7xl mx-auto" style={{ paddingLeft: 24, paddingRight: 24, paddingBottom: 40 }}>
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
+          style={{ paddingTop: 28, marginBottom: 24 }}
         >
-          <h1 className="text-3xl font-black text-white mb-1">Browse</h1>
-          <p className="text-zinc-400 text-sm">Search and add shows to your watchlist</p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'white', margin: 0 }}>Browse</h1>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.38)', marginTop: 4, marginBottom: 18 }}>
+            Search and add shows to your watchlist
+          </p>
         </motion.div>
 
         {/* Sticky filters */}
-        <div className="sticky top-14 z-30 bg-zinc-950/90 backdrop-blur-md pb-4 -mx-4 px-4 sm:-mx-6 sm:px-6">
+        <div
+          className="sticky z-30 pb-4"
+          style={{ top: 48, background: '#09090b', marginLeft: -24, marginRight: -24, paddingLeft: 24, paddingRight: 24 }}
+        >
           {/* Search */}
           <div className="relative mb-3">
             <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" width="16" height="16" viewBox="0 0 16 16" fill="none">

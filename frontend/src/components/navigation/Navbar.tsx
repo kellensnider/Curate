@@ -30,58 +30,115 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex items-center gap-5">
-        <Link href={HOME_ROUTE} className="text-white font-black text-2xl tracking-tight shrink-0">
-          curate
-        </Link>
+    <nav
+      style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 40,
+        height: 48,
+        background: '#09090b',
+        borderBottom: '0.5px solid rgba(255,255,255,0.07)',
+        display: 'flex',
+        alignItems: 'center',
+        paddingLeft: 24,
+        paddingRight: 24,
+      }}
+    >
+      <Link
+        href={HOME_ROUTE}
+        style={{
+          color: 'white',
+          fontWeight: 700,
+          fontSize: 14,
+          textDecoration: 'none',
+          flexShrink: 0,
+          letterSpacing: '-0.01em',
+        }}
+      >
+        curate
+      </Link>
 
-        {isAuthenticated && (
-          <div className="hidden md:flex items-center gap-1 flex-1">
-            {NAV_LINKS.map((link) => (
+      {isAuthenticated && (
+        <div className="hidden md:flex" style={{ alignItems: 'center', gap: 2, flex: 1, marginLeft: 16 }}>
+          {NAV_LINKS.map((link) => {
+            const active = pathname === link.href;
+            return (
               <Link
                 key={link.href}
                 href={link.href}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  pathname === link.href
-                    ? 'bg-zinc-800 text-white'
-                    : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
-                }`}
+                style={{
+                  fontSize: 12,
+                  color: active ? 'white' : 'rgba(255,255,255,0.4)',
+                  textDecoration: 'none',
+                  padding: '3px 10px',
+                  borderRadius: 20,
+                  background: active ? 'rgba(255,255,255,0.1)' : 'transparent',
+                  transition: 'background 0.15s, color 0.15s',
+                }}
               >
                 {link.label}
               </Link>
-            ))}
-          </div>
-        )}
-
-        <div className="ml-auto flex items-center gap-4 shrink-0">
-          {isAuthenticated ? (
-            <>
-              <span className="text-sm text-zinc-400 hidden sm:block">{userName}</span>
-              <button
-                onClick={handleSignOut}
-                className="text-sm text-zinc-400 hover:text-white transition-colors"
-              >
-                Sign out
-              </button>
-            </>
-          ) : (
-            <>
-              <Link
-                href="/auth?mode=signin"
-                className="text-sm text-zinc-300 hover:text-white px-4 py-2 rounded-lg font-medium transition-colors"
-              >
-                Log in
-              </Link>
-              <Link
-                href="/auth?mode=signup"
-                className="text-sm bg-white hover:bg-zinc-200 text-black px-4 py-2 rounded-lg font-bold transition-colors"
-              >
-                Sign up
-              </Link>
-            </>
-          )}
+            );
+          })}
         </div>
+      )}
+
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+        {isAuthenticated ? (
+          <>
+            <span
+              className="hidden sm:block"
+              style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}
+            >
+              {userName}
+            </span>
+            <button
+              onClick={handleSignOut}
+              style={{
+                fontSize: 12,
+                color: 'rgba(255,255,255,0.25)',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                transition: 'color 0.15s',
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.6)')}
+              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.25)')}
+            >
+              Sign out
+            </button>
+          </>
+        ) : (
+          <>
+            <Link
+              href="/auth?mode=signin"
+              style={{
+                fontSize: 12,
+                color: 'rgba(255,255,255,0.5)',
+                textDecoration: 'none',
+                padding: '3px 10px',
+                borderRadius: 20,
+              }}
+            >
+              Log in
+            </Link>
+            <Link
+              href="/auth?mode=signup"
+              style={{
+                fontSize: 12,
+                background: 'white',
+                color: 'black',
+                fontWeight: 700,
+                textDecoration: 'none',
+                padding: '4px 12px',
+                borderRadius: 20,
+              }}
+            >
+              Sign up
+            </Link>
+          </>
+        )}
       </div>
     </nav>
   );

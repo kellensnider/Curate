@@ -32,13 +32,13 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen" style={{ position: 'relative' }}>
       <Navbar />
 
-      <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
-        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <h1 className="text-3xl font-black text-white">Profile</h1>
-          <p className="text-zinc-400 text-sm mt-1">
+      <div className="max-w-2xl mx-auto" style={{ paddingLeft: 24, paddingRight: 24, paddingBottom: 40 }}>
+        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-8" style={{ paddingTop: 28 }}>
+          <h1 style={{ fontSize: 24, fontWeight: 700, color: 'white', margin: 0 }}>Profile</h1>
+          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.38)', marginTop: 4, marginBottom: 18 }}>
             Set the limits your monthly audit has to respect.
           </p>
         </motion.div>
