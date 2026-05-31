@@ -23,8 +23,8 @@ import WatchThisMonth from '../../components/subscriptions/WatchThisMonth';
 import MonthByMonthPlan from '../../components/subscriptions/MonthByMonthPlan';
 import FreeOnMemberships from '../../components/subscriptions/FreeOnMemberships';
 import PipelineProgress, { type PipelineStep } from '../../components/pipeline/PipelineProgress';
-import { runAutomation, API_BASE, type AutomationResult } from '../../lib/api';
 import SubscriptionSetup from '../../components/automation/SubscriptionSetup';
+import { useCreatedAccountsStore } from '../../store/useCreatedAccountsStore';
 import Navbar from '../../components/navigation/Navbar';
 import { calculateSubscriptionCost } from '../../lib/subscriptionCost';
 
@@ -58,8 +58,10 @@ export default function DashboardPage() {
   );
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
-  // Result of the real Tubi automation when a plan adds/removes Tubi.
-  const [tubiResult, setTubiResult] = useState<AutomationResult | null>(null);
+  // What the apply just changed — drives the post-apply AI account prompts.
+  const [justActivated, setJustActivated] = useState<string[]>([]);
+  const [justCancelled, setJustCancelled] = useState<string[]>([]);
+  const createdAccounts = useCreatedAccountsStore((s) => s.created);
   const [pipeline, setPipeline] = useState<PipelineStep[]>([
     { label: 'Read watchlist', status: 'idle' },
     { label: 'Read subscriptions', status: 'idle' },
@@ -217,39 +219,22 @@ export default function DashboardPage() {
   );
   const hasChanges = toActivate.length > 0 || toCancel.length > 0;
 
-  // Apply the plan now. Subscription state is updated server-side; if the plan
-  // adds/removes Tubi, also run the REAL Tubi sign-up/cancel automation using
-  // the user's Curate credentials.
+  // Apply the plan now. Subscription state is updated server-side; the AI agent
+  // then prompts (below) to create the new accounts and cancel the dropped ones.
   async function applyNow() {
     if (!hasChanges) {
       setApplied(true);
       return;
     }
     setApplying(true);
-    setTubiResult(null);
+    // Snapshot the change set so the post-apply prompts have a stable list
+    // (activeServiceIds shifts once applied; the cancel prompt only covers
+    // accounts Curate created, captured here so the list can't reshape mid-run).
+    setJustActivated(toActivate);
+    setJustCancelled(toCancel.filter((id) => createdAccounts.includes(id)));
     try {
       await applyPlan(toActivate, toCancel);
       if (scheduledIds) clearSchedule();
-
-      const tubiAction = toActivate.includes('tubi')
-        ? 'subscribe'
-        : toCancel.includes('tubi')
-        ? 'unsubscribe'
-        : null;
-      if (tubiAction) {
-        if (!accountPassword) {
-          setTubiResult({
-            ok: false,
-            error: 'Log in again so Curate has your password to run the Tubi automation.',
-          });
-        } else {
-          try {
-            setTubiResult(await runAutomation('tubi', tubiAction, accountPassword));
-          } catch (e) {
-            setTubiResult({ ok: false, error: e instanceof Error ? e.message : 'Tubi automation failed' });
-          }
-        }
-      }
       setApplied(true);
     } finally {
       setApplying(false);
@@ -542,46 +527,17 @@ export default function DashboardPage() {
           </>
         )}
 
-        {/* Tubi automation result (when a plan adds/removes Tubi) */}
-        {tubiResult && (
-          <section className="mb-10">
-            <div
-              className={`rounded-2xl border p-4 text-xs ${
-                tubiResult.ok
-                  ? 'bg-emerald-950/40 border-emerald-900/50 text-emerald-300'
-                  : 'bg-red-950/30 border-red-900/40 text-red-300'
-              }`}
-            >
-              <p className="font-semibold text-sm">
-                {tubiResult.ok
-                  ? `✓ Tubi · ${tubiResult.message}`
-                  : `Tubi automation: ${tubiResult.error ?? 'failed'}`}
-              </p>
-              {tubiResult.steps && tubiResult.steps.length > 0 && (
-                <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-zinc-400">
-                  {tubiResult.steps.map((s, i) => (
-                    <li key={i}>• {s}</li>
-                  ))}
-                </ul>
-              )}
-              {tubiResult.screenshot && (
-                <a
-                  href={`${API_BASE}${tubiResult.screenshot}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-block mt-2 text-zinc-300 underline hover:text-white"
-                >
-                  View screenshot →
-                </a>
-              )}
-            </div>
+        {/* After applying the plan: AI sets up the new accounts… */}
+        {applied && justActivated.length > 0 && (
+          <section className="mb-6">
+            <SubscriptionSetup services={justActivated} password={accountPassword} action="subscribe" />
           </section>
         )}
 
-        {/* After an audit: let the AI agent set up next month's new subscriptions */}
-        {auditState === 'done' && toActivate.length > 0 && (
+        {/* …and cancels the dropped ones that Curate created (login + delete). */}
+        {applied && justCancelled.length > 0 && (
           <section className="mb-10">
-            <SubscriptionSetup services={toActivate} password={accountPassword} />
+            <SubscriptionSetup services={justCancelled} password={accountPassword} action="unsubscribe" />
           </section>
         )}
 

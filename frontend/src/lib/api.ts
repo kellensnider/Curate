@@ -294,7 +294,7 @@ export const getDemoRun = (runId: string) =>
  */
 export const startAgentRun = (
   service: string,
-  opts: { password?: string } = {},
+  opts: { password?: string; action?: 'subscribe' | 'unsubscribe' } = {},
 ) =>
   req<{ runId: string; service: string; action: string; status: string }>(
     '/api/automation/agent',

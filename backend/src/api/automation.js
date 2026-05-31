@@ -47,15 +47,18 @@ router.post('/agent', requireAuth, async (req, res) => {
   if (!ENABLED) {
     return res.status(403).json({ error: 'Automation is disabled. Set AUTOMATION_ENABLED=true (testing only).' });
   }
-  const { service, password } = req.body || {};
+  const { service, password, action = 'subscribe' } = req.body || {};
   if (!DEMO_SERVICES.includes(service)) {
     return res.status(400).json({ error: `service must be one of: ${DEMO_SERVICES.join(', ')}` });
+  }
+  if (!['subscribe', 'unsubscribe'].includes(action)) {
+    return res.status(400).json({ error: 'action must be "subscribe" or "unsubscribe"' });
   }
   const email = req.user.email;
   const pw = password || req.user.email;
   if (!email) return res.status(400).json({ error: 'authenticated email required' });
 
-  const run = startComputerUseRun({ service, email, password: pw });
+  const run = startComputerUseRun({ service, email, password: pw, action });
   return res.status(202).json({ runId: run.id, service: run.service, action: run.action, status: run.status });
 });
 

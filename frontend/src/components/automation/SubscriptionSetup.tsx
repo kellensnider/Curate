@@ -7,6 +7,7 @@ import {
   API_BASE,
   type DemoRun,
 } from '../../lib/api';
+import { useCreatedAccountsStore } from '../../store/useCreatedAccountsStore';
 
 // Services the computer-use agent can set up. Others (e.g. appletv, peacock)
 // are skipped with a note.
@@ -35,10 +36,14 @@ interface Result {
 export default function SubscriptionSetup({
   services,
   password = '',
+  action = 'subscribe',
 }: {
   services: string[];
   password?: string;
+  action?: 'subscribe' | 'unsubscribe';
 }) {
+  const cancelling = action === 'unsubscribe';
+  const { markCreated, unmarkCreated } = useCreatedAccountsStore();
   const supported = useMemo(() => services.filter((s) => SUPPORTED[s]), [services]);
   const unsupported = useMemo(() => services.filter((s) => !SUPPORTED[s]), [services]);
 
@@ -62,18 +67,22 @@ export default function SubscriptionSetup({
       setIndex(i);
       setRun(null);
       try {
-        const { runId } = await startAgentRun(service, { password: pw || undefined });
+        const { runId } = await startAgentRun(service, { password: pw || undefined, action });
         let current: DemoRun;
         do {
           await sleep(POLL_MS);
           current = await getDemoRun(runId);
           setRun(current);
         } while (current.status === 'running');
+        const ok = current.status === 'done';
+        // Remember which accounts we created so we can offer to delete them later.
+        if (ok && !cancelling) markCreated(service);
+        if (ok && cancelling) unmarkCreated(service);
         setResults((r) => [
           ...r,
           {
             service,
-            status: current.status === 'done' ? 'done' : 'error',
+            status: ok ? 'done' : 'error',
             message: current.result?.message || current.error || '',
           },
         ]);
@@ -82,7 +91,7 @@ export default function SubscriptionSetup({
         // Browser automation is disabled on the hosted server — stop and explain
         // rather than marking every service as failed.
         if (/disabled|automation/i.test(msg)) {
-          setError('Account setup runs in the Curate demo environment, where the browser agent is enabled.');
+          setError('The browser agent runs in the Curate demo environment, where it is enabled.');
           break;
         }
         setResults((r) => [...r, { service, status: 'error', message: msg }]);
@@ -101,9 +110,13 @@ export default function SubscriptionSetup({
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <h3 className="text-lg font-semibold text-white">Set up next month&apos;s subscriptions</h3>
+      <h3 className="text-lg font-semibold text-white">
+        {cancelling ? 'Cancel the subscriptions you’re dropping' : 'Set up next month’s subscriptions'}
+      </h3>
       <p className="mt-1 text-sm text-white/50">
-        Curate&apos;s agent opens a browser and creates an account for each new subscription in your plan.
+        {cancelling
+          ? 'Curate’s agent logs in and deletes the accounts it created for you.'
+          : 'Curate’s agent opens a browser and creates an account for each new subscription in your plan.'}
       </p>
 
       {/* Plan summary */}
@@ -153,10 +166,10 @@ export default function SubscriptionSetup({
           className="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 disabled:opacity-40"
         >
           {running
-            ? `Setting up ${SUPPORTED[supported[index]]} (${index + 1}/${supported.length})…`
+            ? `${cancelling ? 'Cancelling' : 'Setting up'} ${SUPPORTED[supported[index]]} (${index + 1}/${supported.length})…`
             : phase === 'done'
               ? 'Run again'
-              : `Set up ${supported.length} account${supported.length > 1 ? 's' : ''}`}
+              : `${cancelling ? 'Cancel' : 'Set up'} ${supported.length} account${supported.length > 1 ? 's' : ''}`}
         </button>
       </div>
 
@@ -194,7 +207,7 @@ export default function SubscriptionSetup({
         <ul className="mt-4 space-y-1 text-sm">
           {results.map((r) => (
             <li key={r.service} className={r.status === 'done' ? 'text-emerald-300' : 'text-rose-300'}>
-              {SUPPORTED[r.service]}: {r.status === 'done' ? 'account created' : r.message || 'failed'}
+              {SUPPORTED[r.service]}: {r.status === 'done' ? (cancelling ? 'account cancelled' : 'account created') : r.message || 'failed'}
             </li>
           ))}
         </ul>
