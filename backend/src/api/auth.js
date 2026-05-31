@@ -205,8 +205,66 @@ router.post('/logout', (req, res) => {
 
 router.get('/me', requireAuth, async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.id).select('+paymentCard');
     if (!user) return res.status(401).json({ error: 'Invalid token' });
+    res.json({ user: sanitizeUser(user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Guess the card brand from the leading digits so the UI can label it.
+function detectCardBrand(digits) {
+  if (/^4/.test(digits)) return 'Visa';
+  if (/^(5[1-5]|2[2-7])/.test(digits)) return 'Mastercard';
+  if (/^3[47]/.test(digits)) return 'Amex';
+  if (/^6(011|5)/.test(digits)) return 'Discover';
+  return 'Card';
+}
+
+// HACKATHON NOTE: stores the raw card on the user doc (plaintext, no PCI vault).
+// Deliberately simple for the demo — see the model comment.
+router.put('/payment-card', requireAuth, async (req, res, next) => {
+  try {
+    const { cardholderName, number, expiry, cvc } = req.body || {};
+    const digits = String(number || '').replace(/\D/g, '');
+
+    if (digits.length < 13 || digits.length > 19) {
+      return res.status(400).json({ error: 'Enter a valid card number' });
+    }
+    if (!/^\d{2}\/\d{2}$/.test(String(expiry || '').trim())) {
+      return res.status(400).json({ error: 'Expiry must be in MM/YY format' });
+    }
+    if (!/^\d{3,4}$/.test(String(cvc || '').trim())) {
+      return res.status(400).json({ error: 'Enter a valid CVC' });
+    }
+
+    const user = await User.findById(req.user.id).select('+paymentCard');
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    user.paymentCard = {
+      cardholderName: String(cardholderName || '').trim(),
+      number: digits,
+      expiry: String(expiry).trim(),
+      cvc: String(cvc).trim(),
+      brand: detectCardBrand(digits),
+    };
+    await user.save();
+
+    res.json({ user: sanitizeUser(user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/payment-card', requireAuth, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user.id).select('+paymentCard');
+    if (!user) return res.status(401).json({ error: 'Invalid token' });
+
+    user.paymentCard = undefined;
+    await user.save();
+
     res.json({ user: sanitizeUser(user) });
   } catch (err) {
     next(err);

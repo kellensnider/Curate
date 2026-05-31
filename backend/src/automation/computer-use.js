@@ -82,6 +82,15 @@ async function generate(contents, token) {
 // Scale a model coordinate (0..1000) to a viewport pixel.
 const px = (v, dim) => Math.round((Number(v) / 1000) * dim);
 
+// The goal (and sometimes model reasoning) can contain the user's full card
+// number. Redact long digit runs to last-4 before anything lands in the run
+// log / filmstrip the frontend polls.
+const redactPAN = (s) =>
+  String(s == null ? '' : s).replace(/\b(?:\d[ -]?){13,19}\b/g, (m) => {
+    const digits = m.replace(/\D/g, '');
+    return `•••• ${digits.slice(-4)}`;
+  });
+
 // Execute one model action against the page. Returns a short label for the frame.
 async function executeAction(page, name, args) {
   const a = args || {};
@@ -218,7 +227,7 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
       return '';
     };
     let screenshot = await shot();
-    pushStep(run, `Goal: ${goal}`);
+    pushStep(run, `Goal: ${redactPAN(goal)}`);
     pushFrame(run, Buffer.from(screenshot, 'base64'), 'start');
 
     // Conversation history grows each turn (model is stateful via context).
@@ -235,67 +244,70 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
       contents.push({ role: 'model', parts });
 
       const reasoning = parts.filter((p) => p.text).map((p) => p.text).join(' ').trim();
-      const callPart = parts.find((p) => p.functionCall);
-      const call = callPart?.functionCall;
-      // Gemini Computer Use can attach a "safety decision" to an action that must
-      // be acknowledged in the function response to proceed. We only acknowledge
-      // benign signup confirmations; anything that looks financial halts the run
-      // for a human (we never auto-confirm a payment/charge).
-      const safety = callPart?.safetyDecision || call?.args?.safetyDecision || call?.args?.safety_decision;
-      const safetyText = safety ? String(safety.explanation || safety.decision || '').toLowerCase() : '';
-      const financial = /payment|purchase|charge|credit card|debit|billing|\bbuy\b|place .*order|\$\d/.test(safetyText);
-      // The model raises this right as it submits account creation/finalization.
-      const creatingAccount = /creat(e|es|ing).{0,20}account|new account|finaliz/i.test(safetyText);
+      if (reasoning) pushStep(run, redactPAN(reasoning).slice(0, 240));
 
-      if (reasoning) pushStep(run, reasoning.slice(0, 240));
-      if (safety && financial) {
-        pushStep(run, `Halted at a payment-related safety check (not auto-confirmed): ${safetyText.slice(0, 140)}`);
-        finishRun(run, { result: { ok: false, message: 'Stopped before a payment/charge action — safety check not auto-confirmed.' } });
-        return;
-      }
-      if (safety) pushStep(run, `Safety check acknowledged: ${safetyText.slice(0, 120) || 'confirm action'}`);
+      // The model may emit SEVERAL actions in one turn; Gemini requires a function
+      // response for every call (matched by name), so execute each and respond to
+      // each — responding to only the first triggers a 400 on the next request.
+      const callParts = parts.filter((p) => p.functionCall);
 
       // No action → the model considers the task done (or is just narrating).
-      if (!call) {
+      if (callParts.length === 0) {
         finishRun(run, { result: { ok: true, message: reasoning || 'Agent finished.', steps_taken: step } });
         return;
       }
 
-      if (creatingAccount) submittingCreation = true;
-      const label = await executeAction(page, call.name, call.args);
+      const responseParts = [];
+      let lastLabel = '';
+      let creatingAccountThisTurn = false;
+      for (const cp of callParts) {
+        const call = cp.functionCall;
+        // A "safety decision" must be acknowledged in the response to proceed. We
+        // ack benign confirmations; anything financial halts the run for a human.
+        const safety = cp.safetyDecision || call.args?.safetyDecision || call.args?.safety_decision;
+        const safetyText = safety ? String(safety.explanation || safety.decision || '').toLowerCase() : '';
+        const financial = /payment|purchase|charge|credit card|debit|billing|\bbuy\b|place .*order|\$\d/.test(safetyText);
+        const creatingAccount = /creat(e|es|ing).{0,20}account|new account|finaliz/i.test(safetyText);
 
-      // Once the account-creation action is submitted, capture the result and
-      // finish — don't spend more model steps (and remote-session time) waiting
-      // to verify the homepage; that's where the session was timing out.
-      if (creatingAccount) {
+        if (safety && financial) {
+          pushStep(run, `Halted at a payment-related safety check (not auto-confirmed): ${safetyText.slice(0, 140)}`);
+          finishRun(run, { result: { ok: false, message: 'Stopped before a payment/charge action — safety check not auto-confirmed.' } });
+          return;
+        }
+        if (safety) pushStep(run, `Safety check acknowledged: ${safetyText.slice(0, 120) || 'confirm action'}`);
+        if (creatingAccount) { submittingCreation = true; creatingAccountThisTurn = true; }
+
+        lastLabel = await executeAction(page, call.name, call.args);
+        if (!creatingAccount) await page.waitForTimeout(350); // settle between actions
+
+        responseParts.push({
+          functionResponse: {
+            name: call.name,
+            response: { url: page.url(), ...(safety ? { safety_acknowledgement: 'true' } : {}) },
+          },
+        });
+      }
+
+      // One screenshot after the turn's actions; attach it to the last response.
+      screenshot = await shot();
+      responseParts[responseParts.length - 1].functionResponse.parts = [{ inlineData: { mimeType: 'image/png', data: screenshot } }];
+      pushFrame(run, Buffer.from(screenshot, 'base64'), redactPAN(`${lastLabel}${reasoning ? ' — ' + reasoning.slice(0, 60) : ''}`));
+
+      // If the account-creation action was submitted this turn, finish cleanly —
+      // don't burn more model steps / remote-session time verifying the homepage.
+      if (creatingAccountThisTurn) {
         pushStep(run, 'Account creation submitted — loading your home page');
         try {
           await page.waitForLoadState('networkidle', { timeout: 12000 }).catch(() => {});
           await page.waitForTimeout(1500);
-          screenshot = await shot();
-          pushFrame(run, Buffer.from(screenshot, 'base64'), 'account created');
+          const finalShot = await shot();
+          pushFrame(run, Buffer.from(finalShot, 'base64'), 'account created');
         } catch { /* session may have closed; the account is already created */ }
         finishRun(run, { result: { ok: true, message: 'Account created.', steps_taken: step + 1 } });
         return;
       }
 
-      await page.waitForTimeout(700); // let the UI settle before the next shot
-      screenshot = await shot();
-      pushFrame(run, Buffer.from(screenshot, 'base64'), `${label}${reasoning ? ' — ' + reasoning.slice(0, 60) : ''}`);
-
-      // Feed the new page state back as the function's result.
-      contents.push({
-        role: 'user',
-        parts: [{
-          functionResponse: {
-            name: call.name,
-            // Only acknowledge when the model raised a (non-financial) safety
-            // decision for this action — financial ones already halted above.
-            response: { url: page.url(), ...(safety ? { safety_acknowledgement: 'true' } : {}) },
-            parts: [{ inlineData: { mimeType: 'image/png', data: screenshot } }],
-          },
-        }],
-      });
+      contents.push({ role: 'user', parts: responseParts });
     }
 
     finishRun(run, { result: { ok: true, message: `Reached step cap (${maxSteps}).`, steps_taken: maxSteps } });

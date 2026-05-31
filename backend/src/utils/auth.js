@@ -25,6 +25,19 @@ function signToken(user) {
   );
 }
 
+// Never ship the full PAN/CVC to the client — only enough to recognize the
+// saved card (brand, last 4, expiry, name). The full number lives in Mongo.
+function maskCard(card) {
+  if (!card || !card.number) return null;
+  const digits = String(card.number).replace(/\D/g, '');
+  return {
+    brand: card.brand || null,
+    last4: digits.slice(-4),
+    expiry: card.expiry || null,
+    cardholderName: card.cardholderName || null,
+  };
+}
+
 function sanitizeUser(user) {
   if (!user) return null;
   const doc = typeof user.toObject === 'function' ? user.toObject() : user;
@@ -34,6 +47,7 @@ function sanitizeUser(user) {
     email: doc.email,
     name: doc.name,
     preferences: doc.preferences,
+    paymentCard: maskCard(doc.paymentCard),
   };
 }
 
@@ -42,4 +56,5 @@ module.exports = {
   getJwtSecret,
   signToken,
   sanitizeUser,
+  maskCard,
 };

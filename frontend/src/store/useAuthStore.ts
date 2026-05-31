@@ -21,6 +21,7 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   hydrateUser: () => Promise<void>;
+  setUser: (user: AuthUser) => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -84,6 +85,8 @@ export const useAuthStore = create<AuthState>()(
           });
         }
       },
+
+      setUser: (user) => set(userState(user)),
 
       login: async (email, password) => {
         set({ loading: true, error: null });

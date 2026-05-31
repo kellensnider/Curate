@@ -4,6 +4,14 @@ const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
 export const API_BASE = BASE;
 const TOKEN_KEY = 'curate-token';
 
+/** Masked card summary returned by the backend — never the full PAN/CVC. */
+export interface PaymentCardSummary {
+  brand: string | null;
+  last4: string;
+  expiry: string | null;
+  cardholderName: string | null;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -14,6 +22,7 @@ export interface AuthUser {
     allowAutoSubscribe: boolean;
     allowAutoCancel: boolean;
   };
+  paymentCard?: PaymentCardSummary | null;
 }
 
 export interface AuthResponse {
@@ -136,6 +145,22 @@ export const logout = () =>
 
 export const getCurrentUser = () =>
   req<{ user: AuthUser }>('/api/auth/me');
+
+export interface PaymentCardInput {
+  cardholderName: string;
+  number: string;
+  expiry: string; // MM/YY
+  cvc: string;
+}
+
+export const savePaymentCard = (card: PaymentCardInput) =>
+  req<{ user: AuthUser }>('/api/auth/payment-card', {
+    method: 'PUT',
+    body: JSON.stringify(card),
+  });
+
+export const deletePaymentCard = () =>
+  req<{ user: AuthUser }>('/api/auth/payment-card', { method: 'DELETE' });
 
 export const forgotPassword = (email: string) =>
   req<{ success: boolean; message: string }>('/api/auth/forgot-password', {

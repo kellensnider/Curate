@@ -8,6 +8,7 @@ import { ALL_SERVICES_TOTAL } from '../../lib/mockData';
 import { useAuthStore } from '../../store/useAuthStore';
 import { usePreferencesStore } from '../../store/usePreferencesStore';
 import Navbar from '../../components/navigation/Navbar';
+import PaymentCardSection from '../../components/PaymentCardSection';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -73,6 +74,9 @@ export default function ProfilePage() {
           </div>
           <span className="text-zinc-400 text-sm shrink-0">Manage →</span>
         </Link>
+
+        {/* Payment method */}
+        <PaymentCardSection />
 
         {/* Preferences */}
         <section className="space-y-5">

@@ -2,6 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { requireAuth } = require('../middleware/auth');
 const { runTubiAction } = require('../automation/tubi');
+const { User } = require('../models');
+const { toPaymentMethod } = require('../automation/paymentCard');
+
+// Load the authenticated user's stored card (plaintext — see models/User.js).
+// Returns null when no card is on file so the flows fall back gracefully.
+async function loadUserCard(userId) {
+  const user = await User.findById(userId).select('+paymentCard');
+  return user?.paymentCard || null;
+}
 
 // Hard off-switch. Real browser automation against third-party sites is only
 // run when AUTOMATION_ENABLED=true (testing, with your OWN accounts). The live
@@ -36,7 +45,11 @@ router.post('/demo', requireAuth, async (req, res) => {
   const pw = password || req.user.email; // caller should pass a real password for live signin
   if (!email) return res.status(400).json({ error: 'authenticated email required' });
 
-  const run = startDemoRun({ service, action, email, password: pw, paymentMethod: payment_method });
+  // Default the payment method to the user's saved card when the caller didn't
+  // pass one, so the scripted flows can reach the (un-submitted) payment screen.
+  const paymentMethod = payment_method || toPaymentMethod(await loadUserCard(req.user.id));
+
+  const run = startDemoRun({ service, action, email, password: pw, paymentMethod });
   return res.status(202).json({ runId: run.id, service: run.service, action: run.action, status: run.status });
 });
 
@@ -58,7 +71,11 @@ router.post('/agent', requireAuth, async (req, res) => {
   const pw = password || req.user.email;
   if (!email) return res.status(400).json({ error: 'authenticated email required' });
 
-  const run = startComputerUseRun({ service, email, password: pw, action });
+  // The agent reads the saved card so it can fill a payment form if one is
+  // prompted (it's instructed to stop before submitting an actual charge).
+  const card = await loadUserCard(req.user.id);
+
+  const run = startComputerUseRun({ service, email, password: pw, action, card });
   return res.status(202).json({ runId: run.id, service: run.service, action: run.action, status: run.status });
 });
 

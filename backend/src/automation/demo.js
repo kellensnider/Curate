@@ -12,6 +12,7 @@
 const { subscribeToService } = require('../mcp/browser-tools');
 const { createRun, pushStep, finishRun, startFrameCapture } = require('./runs');
 const { runComputerUse } = require('./computer-use');
+const { describeCardForAgent } = require('./paymentCard');
 
 function startDemoRun({ service, action = 'subscribe', email, password, paymentMethod }) {
   const run = createRun(service, action);
@@ -58,10 +59,18 @@ const LOGIN_URLS = {
   max: 'https://www.max.com/login',
 };
 
-function computerUsePreset(service, { email, password, action = 'subscribe' }) {
+function computerUsePreset(service, { email, password, action = 'subscribe', card = null }) {
   const creds = `Use email "${email}" and password "${password}".`;
   // First name defaults to the email's local part (before "@"), letters only.
   const firstName = (email.split('@')[0] || 'Curate').replace(/[^a-zA-Z]/g, '').slice(0, 20) || 'Curate';
+
+  // What to do when a signup flow reaches the payment screen. If the user has a
+  // saved card, the agent fills it (but never submits an actual charge); without
+  // one, it stops at the payment screen as before. Reaching payment = success.
+  const cardInfo = describeCardForAgent(card);
+  const paymentInstruction = cardInfo
+    ? cardInfo
+    : 'STOP as soon as you reach the payment / credit-card screen. Do NOT enter any payment details and do NOT submit. Reaching the payment screen IS success — report that you reached it.';
 
   // ── Cancel / delete an account Curate created earlier ──────────────────────
   if (action === 'unsubscribe') {
@@ -118,33 +127,34 @@ function computerUsePreset(service, { email, password, action = 'subscribe' }) {
           'Begin signing up for Netflix on the cheapest plan ("Standard with ads").',
           `${creds} If a name is requested, use "${firstName}".`,
           'Work through the steps: continue past the intro, select the Standard with ads plan, create the account with the email and password above, and skip email verification if offered.',
-          'STOP as soon as you reach the payment / "choose how to pay" / credit-card screen.',
-          'Do NOT enter any credit card or payment details, and do NOT click "Start Membership" or any final submit. Reaching the payment screen IS success — report that you reached it.',
+          'When you reach the payment / "choose how to pay" / credit-card screen:',
+          paymentInstruction,
+          'Never click "Start Membership" or any final submit/charge button.',
           'If a CAPTCHA or human-verification check blocks progress, stop and report it.',
         ].join(' '),
       };
     case 'disney':
       return {
         startUrl: 'https://www.disneyplus.com/sign-up',
-        goal: `Begin a Disney+ signup for the cheapest monthly plan. ${creds} If a name is requested, use "${firstName}". Proceed to the payment page and then STOP — do NOT submit payment.`,
+        goal: `Begin a Disney+ signup for the cheapest monthly plan. ${creds} If a name is requested, use "${firstName}". When you reach the payment page: ${paymentInstruction}`,
       };
     case 'hulu':
       return {
         startUrl: 'https://www.hulu.com/signup',
-        goal: `Begin a Hulu signup for the cheapest ad-supported plan. ${creds} If a name is requested, use "${firstName}". Proceed to the payment page and then STOP — do NOT submit payment.`,
+        goal: `Begin a Hulu signup for the cheapest ad-supported plan. ${creds} If a name is requested, use "${firstName}". When you reach the payment page: ${paymentInstruction}`,
       };
     case 'max':
       return {
         startUrl: 'https://www.max.com/subscribe',
-        goal: `Begin a Max signup for the cheapest "Basic With Ads" monthly plan. ${creds} If a name is requested, use "${firstName}". Proceed to the payment page and then STOP — do NOT submit payment.`,
+        goal: `Begin a Max signup for the cheapest "Basic With Ads" monthly plan. ${creds} If a name is requested, use "${firstName}". When you reach the payment page: ${paymentInstruction}`,
       };
     default:
       return null;
   }
 }
 
-function startComputerUseRun({ service, email, password, action = 'subscribe' }) {
-  const preset = computerUsePreset(service, { email, password, action });
+function startComputerUseRun({ service, email, password, action = 'subscribe', card = null }) {
+  const preset = computerUsePreset(service, { email, password, action, card });
   const run = createRun(service, action === 'unsubscribe' ? 'computer-use-cancel' : 'computer-use');
   if (!preset) {
     pushStep(run, `No computer-use preset for ${service} (${action})`);
