@@ -68,13 +68,20 @@ export default function SubscriptionSetup({
       setRun(null);
       try {
         const { runId } = await startAgentRun(service, { password: pw || undefined, action });
-        let current: DemoRun;
-        do {
+        let current: DemoRun | null = null;
+        // Poll until the run finishes, tolerating transient network errors, with a
+        // safety cap (~4 min) so a stuck run can never spin forever during a demo.
+        for (let polls = 0; polls < 240; polls++) {
           await sleep(POLL_MS);
-          current = await getDemoRun(runId);
-          setRun(current);
-        } while (current.status === 'running');
-        const ok = current.status === 'done';
+          try {
+            current = await getDemoRun(runId);
+            setRun(current);
+          } catch {
+            /* transient poll error — keep trying */
+          }
+          if (current && current.status !== 'running') break;
+        }
+        const ok = current?.status === 'done';
         // Remember which accounts we created so we can offer to delete them later.
         if (ok && !cancelling) markCreated(service);
         if (ok && cancelling) unmarkCreated(service);
@@ -83,7 +90,7 @@ export default function SubscriptionSetup({
           {
             service,
             status: ok ? 'done' : 'error',
-            message: current.result?.message || current.error || '',
+            message: current?.result?.message || current?.error || 'Timed out waiting for the agent.',
           },
         ]);
       } catch (e) {

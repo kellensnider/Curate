@@ -66,7 +66,7 @@ function pushFrame(run, buffer, label) {
   if (!run || !buffer) return;
   if (!fs.existsSync(SCREENSHOT_DIR)) fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
   const seq = run.frames.length;
-  const file = `${run.id}-${String(seq).padStart(3, '0')}.jpg`;
+  const file = `${run.id}-${String(seq).padStart(3, '0')}.png`;
   try {
     fs.writeFileSync(path.join(SCREENSHOT_DIR, file), buffer);
     run.frames.push({ seq, url: `/screenshots/${file}`, label: label || '', ts: Date.now() });
