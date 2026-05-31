@@ -41,7 +41,13 @@ export default function HomePage() {
       <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-transparent to-zinc-950/80" />
 
       <header className="relative z-10 max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
-        <Link href="/" className="text-white font-black text-2xl tracking-tight">
+        <Link href="/" className="flex items-center gap-2 text-white font-black text-2xl tracking-tight">
+          <img
+            src="/curate-logo.png"
+            alt=""
+            aria-hidden="true"
+            className="h-8 w-8 object-contain"
+          />
           curate
         </Link>
         <div className="flex items-center gap-3">

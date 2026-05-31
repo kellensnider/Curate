@@ -58,10 +58,24 @@ export default function Navbar() {
           fontWeight: 700,
           fontSize: 17,
           textDecoration: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
           flexShrink: 0,
           letterSpacing: '-0.01em',
         }}
       >
+        <img
+          src="/curate-logo.png"
+          alt=""
+          aria-hidden="true"
+          style={{
+            width: 26,
+            height: 26,
+            objectFit: 'contain',
+            display: 'block',
+          }}
+        />
         curate
       </Link>
 

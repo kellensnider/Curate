@@ -3,6 +3,11 @@ import './globals.css';
 export const metadata = {
   title: 'Curate — Smart Streaming',
   description: 'AI-powered streaming subscription optimizer',
+  icons: {
+    icon: '/curate-logo.png',
+    shortcut: '/curate-logo.png',
+    apple: '/curate-logo.png',
+  },
 };
 
 export default function RootLayout({ children }) {
