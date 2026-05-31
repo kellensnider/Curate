@@ -35,6 +35,7 @@ interface SubscriptionState {
   fetchPrices: () => Promise<void>;
   activate: (service: string) => Promise<void>;
   cancel: (service: string) => Promise<void>;
+  setInfiniteMembership: (service: string, enabled: boolean) => Promise<void>;
   applyPlan: (activate: string[], cancel: string[]) => Promise<void>;
   runOptimization: (shows: Show[]) => void;
   selectPlan: (plan: OptimizationResult | null) => void;
@@ -86,6 +87,11 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     await get().fetchSubscriptions();
   },
 
+  setInfiniteMembership: async (service, enabled) => {
+    await apiActivate(service, { infiniteMembership: enabled });
+    await get().fetchSubscriptions();
+  },
+
   applyPlan: async (activate, cancel) => {
     await apiApplyPlan(activate, cancel);
     await get().fetchSubscriptions();
@@ -97,6 +103,10 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     const { maxMonthlyCost, maxSubscriptions, showsPerMonth } =
       usePreferencesStore.getState();
     const { watchedIds } = useWatchedStore.getState();
+    const infiniteServiceIds = get()
+      .subscriptions
+      .filter((sub) => sub.status === 'active' && sub.infiniteMembership)
+      .map((sub) => sub.service);
 
     // Plan several months ahead, completing `showsPerMonth` titles each month.
     const watchPlan = planMultiMonth(ids, shows, {
@@ -104,6 +114,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       maxMonthlyCost,
       showsPerMonth,
       watchedIds,
+      infiniteServiceIds,
     });
 
     // Month 0's plan is the actionable "next month" recommendation; fall back to
@@ -113,6 +124,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       optimizeSubscriptions(ids, shows, {
         maxPurchases: maxSubscriptions,
         maxMonthlyCost,
+        infiniteServiceIds,
       });
 
     // Default the user's selection to the optimal plan; they can edit from there.

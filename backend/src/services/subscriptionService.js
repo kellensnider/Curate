@@ -13,6 +13,7 @@ async function ensureDefaultSubscriptions(userId) {
           displayName: price.name,
           status: ACTIVE_DEFAULT_SERVICES.has(service) ? 'active' : 'cancelled',
           monthlyCost: price.monthly,
+          infiniteMembership: false,
           updatedAt: new Date(),
         },
       },

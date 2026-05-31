@@ -134,6 +134,8 @@ export interface OptimizeOptions {
    * user is never left with an empty plan).
    */
   maxMonthlyCost?: number;
+  /** Services the user has free ongoing access to. They count for coverage at $0. */
+  infiniteServiceIds?: string[];
 }
 
 // Enumerate every combination of `items` with size 1..max.
@@ -163,11 +165,16 @@ export function optimizeSubscriptions(
   pool: Show[] = SHOWS,
   options: OptimizeOptions = {}
 ): OptimizationResult {
-  const { maxPurchases = 2, maxMonthlyCost = Infinity } = options;
+  const { maxPurchases = 2, maxMonthlyCost = Infinity, infiniteServiceIds = [] } = options;
+  const infiniteServices = new Set(infiniteServiceIds);
+  const purchasableOptions = PLAN_OPTIONS.filter(
+    (option) => !option.services.every((serviceId) => infiniteServices.has(serviceId))
+  );
 
   if (selectedShowIds.length === 0) {
+    const requiredServices = SERVICES.filter((s) => infiniteServices.has(s.id));
     return {
-      requiredServices: [],
+      requiredServices,
       purchases: [],
       monthlyTotal: 0,
       monthlySavings: ALL_SERVICES_TOTAL,
@@ -186,7 +193,7 @@ export function optimizeSubscriptions(
   const weightOf = new Map(orderedShows.map((s, i) => [s.id, n - i]));
 
   const scorePlan = (combo: PlanOption[]) => {
-    const granted = new Set(combo.flatMap((o) => o.services));
+    const granted = new Set([...combo.flatMap((o) => o.services), ...Array.from(infiniteServices)]);
     let weight = 0;
     for (const show of orderedShows) {
       if (show.streamingServices.some((s) => granted.has(s))) {
@@ -198,9 +205,9 @@ export function optimizeSubscriptions(
   };
 
   let best: PlanOption[] = [];
-  let bestScore = { weight: -1, cost: Infinity };
+  let bestScore = scorePlan([]);
 
-  for (const combo of combinations(PLAN_OPTIONS, maxPurchases)) {
+  for (const combo of combinations(purchasableOptions, maxPurchases)) {
     const { weight, cost } = scorePlan(combo);
     // Respect the user's monthly budget — never recommend a plan over it.
     if (cost > maxMonthlyCost) continue;
@@ -220,13 +227,13 @@ export function optimizeSubscriptions(
   // If the budget is so tight nothing qualified, fall back to the single
   // cheapest option that still covers something, so the plan is never empty.
   if (best.length === 0) {
-    const fallback = PLAN_OPTIONS
+    const fallback = purchasableOptions
       .filter((o) => scorePlan([o]).weight > 0)
       .sort((a, b) => a.monthlyPrice - b.monthlyPrice)[0];
     if (fallback) best = [fallback];
   }
 
-  const granted = new Set(best.flatMap((o) => o.services));
+  const granted = new Set([...best.flatMap((o) => o.services), ...Array.from(infiniteServices)]);
   const requiredServices = SERVICES.filter((s) => granted.has(s.id));
 
   const coverageMap: Record<string, string[]> = {};
@@ -255,10 +262,14 @@ export function optimizeSubscriptions(
 export function planFromOptionIds(
   optionIds: string[],
   selectedShowIds: string[],
-  pool: Show[] = SHOWS
+  pool: Show[] = SHOWS,
+  options: Pick<OptimizeOptions, 'infiniteServiceIds'> = {}
 ): OptimizationResult {
-  const purchases = PLAN_OPTIONS.filter((o) => optionIds.includes(o.id));
-  const granted = new Set(purchases.flatMap((o) => o.services));
+  const infiniteServices = new Set(options.infiniteServiceIds ?? []);
+  const purchases = PLAN_OPTIONS.filter(
+    (o) => optionIds.includes(o.id) && !o.services.every((serviceId) => infiniteServices.has(serviceId))
+  );
+  const granted = new Set([...purchases.flatMap((o) => o.services), ...Array.from(infiniteServices)]);
   const requiredServices = SERVICES.filter((s) => granted.has(s.id));
 
   const byId = new Map(pool.map((s) => [s.id, s]));

@@ -23,8 +23,12 @@ export default function BillingCapture({ activeSubscriptions }: BillingCapturePr
 
   function saveEntry(sub: BackendSubscription) {
     if (!dateInput) return;
-    setEntry(sub.service, dateInput, sub.monthlyCost, cycleInput);
+    setEntry(sub.service, dateInput, effectiveCost(sub), cycleInput);
     setEditing(null);
+  }
+
+  function effectiveCost(sub: BackendSubscription) {
+    return sub.infiniteMembership ? 0 : sub.effectiveMonthlyCost ?? sub.monthlyCost;
   }
 
   if (activeSubscriptions.length === 0) {
@@ -46,6 +50,7 @@ export default function BillingCapture({ activeSubscriptions }: BillingCapturePr
           const entry = entries[sub.service];
           const days = getDaysUntilRenewal(sub.service);
           const isEditing = editing === sub.service;
+          const isInfinite = Boolean(sub.infiniteMembership);
 
           return (
             <div key={sub.service} className="flex items-center gap-3">
@@ -57,7 +62,11 @@ export default function BillingCapture({ activeSubscriptions }: BillingCapturePr
                 <p className="text-sm text-white font-medium truncate">
                   {sub.displayName}
                 </p>
-                {isEditing ? (
+                {isInfinite ? (
+                  <p className="text-xs font-semibold text-emerald-300 mt-0.5">
+                    Infinite membership · $0/mo
+                  </p>
+                ) : isEditing ? (
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                     <input
                       type="date"
@@ -115,11 +124,12 @@ export default function BillingCapture({ activeSubscriptions }: BillingCapturePr
               <div className="flex gap-2 shrink-0">
                 <button
                   onClick={() => startEdit(sub.service)}
+                  disabled={isInfinite}
                   className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
                 >
-                  {entry ? 'Edit' : 'Set date'}
+                  {isInfinite ? 'Free access' : entry ? 'Edit' : 'Set date'}
                 </button>
-                {entry && !isEditing && (
+                {entry && !isEditing && !isInfinite && (
                   <button
                     onClick={() => clearEntry(sub.service)}
                     className="text-xs text-zinc-700 hover:text-red-400 transition-colors"

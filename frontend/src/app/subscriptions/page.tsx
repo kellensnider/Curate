@@ -8,6 +8,7 @@ import { useSubscriptionStore } from '../../store/useSubscriptionStore';
 import { useBillingStore, type BillingCycle } from '../../store/useBillingStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import Navbar from '../../components/navigation/Navbar';
+import InfiniteMembershipControl from '../../components/subscriptions/InfiniteMembershipControl';
 
 export default function SubscriptionsPage() {
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function SubscriptionsPage() {
     fetchPrices,
     activate,
     cancel,
+    setInfiniteMembership,
   } = useSubscriptionStore();
   const { entries, setEntry, clearEntry, getDaysUntilRenewal, getMonthsUntilRenewal } =
     useBillingStore();
@@ -36,13 +38,19 @@ export default function SubscriptionsPage() {
   }, []);
 
   const activeSubs = subscriptions.filter((s) => s.status === 'active');
-  const monthlyTotal = activeSubs.reduce((sum, s) => sum + s.monthlyCost, 0);
+  const monthlyTotal = activeSubs.reduce((sum, s) => sum + effectiveCost(s), 0);
 
   function priceOf(id: string) {
     return prices[id]?.monthly ?? SERVICES.find((s) => s.id === id)?.monthlyPrice ?? 0;
   }
 
+  function effectiveCost(sub: { monthlyCost: number; effectiveMonthlyCost?: number; infiniteMembership?: boolean }) {
+    return sub.infiniteMembership ? 0 : sub.effectiveMonthlyCost ?? sub.monthlyCost;
+  }
+
   async function toggle(id: string, isActive: boolean) {
+    const sub = subscriptions.find((s) => s.service === id);
+    if (sub?.infiniteMembership) return;
     setBusy(id);
     try {
       if (isActive) {
@@ -56,8 +64,19 @@ export default function SubscriptionsPage() {
     }
   }
 
+  async function toggleInfiniteMembership(id: string, enabled: boolean) {
+    setBusy(id);
+    try {
+      await setInfiniteMembership(id, enabled);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function describeDuration(id: string): string | null {
     const entry = entries[id];
+    const sub = subscriptions.find((s) => s.service === id);
+    if (sub?.infiniteMembership) return 'Infinite membership · $0/mo';
     if (!entry) return null;
     if (entry.cycle === 'annual') {
       const m = getMonthsUntilRenewal(id);
@@ -97,6 +116,8 @@ export default function SubscriptionsPage() {
           {SERVICES.map((svc) => {
             const sub = subscriptions.find((s) => s.service === svc.id);
             const isActive = sub?.status === 'active';
+            const isInfinite = Boolean(sub?.infiniteMembership);
+            const displayCost = sub ? effectiveCost(sub) : priceOf(svc.id);
             const entry = entries[svc.id];
             const duration = describeDuration(svc.id);
 
@@ -117,30 +138,42 @@ export default function SubscriptionsPage() {
                       {svc.name}
                     </p>
                     <p className="text-xs text-zinc-500">
-                      ${priceOf(svc.id).toFixed(2)}/mo
+                      ${displayCost.toFixed(2)}/mo
+                      {isInfinite && (
+                        <span className="ml-2 text-zinc-600">
+                          Normally ${priceOf(svc.id).toFixed(2)}/mo
+                        </span>
+                      )}
                       {isActive && duration ? ` · ${duration}` : ''}
                     </p>
                   </div>
 
-                  {/* Toggle */}
-                  <button
-                    onClick={() => toggle(svc.id, !!isActive)}
-                    disabled={busy === svc.id}
-                    className={`shrink-0 w-12 h-7 rounded-full relative transition-colors disabled:opacity-50 ${
-                      isActive ? 'bg-emerald-500' : 'bg-zinc-700'
-                    }`}
-                    aria-pressed={isActive}
-                  >
-                    <span
-                      className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${
-                        isActive ? 'left-6' : 'left-1'
+                  <div className="shrink-0 space-y-2">
+                    {/* Toggle */}
+                    <button
+                      onClick={() => toggle(svc.id, !!isActive)}
+                      disabled={busy === svc.id || isInfinite}
+                      className={`ml-auto block w-12 h-7 rounded-full relative transition-colors disabled:opacity-50 ${
+                        isActive ? 'bg-emerald-500' : 'bg-zinc-700'
                       }`}
+                      aria-pressed={isActive}
+                    >
+                      <span
+                        className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${
+                          isActive ? 'left-6' : 'left-1'
+                        }`}
+                      />
+                    </button>
+                    <InfiniteMembershipControl
+                      enabled={isInfinite}
+                      disabled={busy === svc.id}
+                      onChange={(enabled) => toggleInfiniteMembership(svc.id, enabled)}
                     />
-                  </button>
+                  </div>
                 </div>
 
                 {/* Duration controls (only when active) */}
-                {isActive && (
+                {isActive && !isInfinite && (
                   <div className="mt-3 pt-3 border-t border-zinc-800 flex flex-wrap items-center gap-3">
                     <label className="text-xs text-zinc-500">Renews / ends</label>
                     <input
@@ -150,7 +183,7 @@ export default function SubscriptionsPage() {
                         setEntry(
                           svc.id,
                           e.target.value,
-                          sub?.monthlyCost ?? priceOf(svc.id),
+                          sub ? effectiveCost(sub) : priceOf(svc.id),
                           entry?.cycle ?? 'monthly',
                         )
                       }
@@ -162,7 +195,7 @@ export default function SubscriptionsPage() {
                         setEntry(
                           svc.id,
                           entry?.renewalDate ?? '',
-                          sub?.monthlyCost ?? priceOf(svc.id),
+                          sub ? effectiveCost(sub) : priceOf(svc.id),
                           e.target.value as BillingCycle,
                         )
                       }
@@ -180,6 +213,11 @@ export default function SubscriptionsPage() {
                         Clear
                       </button>
                     )}
+                  </div>
+                )}
+                {isActive && isInfinite && (
+                  <div className="mt-3 pt-3 border-t border-zinc-800 text-xs font-semibold text-emerald-300">
+                    Free ongoing access. Renewal date and billing interval are not needed.
                   </div>
                 )}
               </div>

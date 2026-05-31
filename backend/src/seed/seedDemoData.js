@@ -54,6 +54,7 @@ async function seedDemoData() {
       displayName: price.name,
       status: ACTIVE_DEMO_SERVICES.includes(service) ? 'active' : 'cancelled',
       monthlyCost: price.monthly,
+      infiniteMembership: false,
     }));
     await Subscription.insertMany(subscriptions);
 

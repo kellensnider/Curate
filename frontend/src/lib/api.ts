@@ -58,6 +58,9 @@ export interface BackendSubscription {
   status: 'active' | 'cancelled';
   monthlyCost: number;
   monthly_cost?: number;
+  infiniteMembership?: boolean;
+  effectiveMonthlyCost?: number;
+  effective_monthly_cost?: number;
   updatedAt: string;
 }
 
@@ -178,10 +181,10 @@ export const getSubscriptions = () =>
 export const getServicePrices = () =>
   req<Record<string, ServicePrice>>('/api/subscriptions/prices/all');
 
-export const activateService = (service: string) =>
-  req<{ success: boolean; cost: number }>(
+export const activateService = (service: string, options?: { infiniteMembership?: boolean }) =>
+  req<{ success: boolean; cost: number; subscription?: BackendSubscription }>(
     '/api/subscriptions/activate',
-    { method: 'POST', body: JSON.stringify({ service }) },
+    { method: 'POST', body: JSON.stringify({ service, ...options }) },
   );
 
 export const cancelService = (service: string) =>

@@ -16,6 +16,7 @@ When making recommendations:
 6. Calculate monthly savings vs. their current active subscriptions
 7. After delivering your recommendation, ask if they'd like you to apply the changes
 8. When applying changes, use activate_subscription and cancel_subscription tools
+9. Never recommend cancelling an infinite membership; treat it as active free coverage at $0/month
 
 Be conversational but efficient.`;
 

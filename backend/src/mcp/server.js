@@ -82,6 +82,10 @@ async function getUserId(inputUserId) {
   return userId;
 }
 
+function effectiveMonthlyCost(subscription) {
+  return subscription.infiniteMembership ? 0 : subscription.monthlyCost;
+}
+
 // Tool execution handlers.
 async function executeTool(toolName, input) {
   switch (toolName) {
@@ -110,16 +114,19 @@ async function executeTool(toolName, input) {
       const all = subs.map((sub) => ({
         service: sub.service,
         displayName: sub.displayName,
-        status: sub.status,
+        status: sub.infiniteMembership ? 'active' : sub.status,
         monthly_cost: sub.monthlyCost,
         monthlyCost: sub.monthlyCost,
+        effective_monthly_cost: effectiveMonthlyCost(sub),
+        effectiveMonthlyCost: effectiveMonthlyCost(sub),
+        infiniteMembership: Boolean(sub.infiniteMembership),
       }));
       const active = all.filter(s => s.status === 'active');
 
       return {
         all,
         active,
-        monthly_total: active.reduce((sum, s) => sum + s.monthlyCost, 0).toFixed(2),
+        monthly_total: active.reduce((sum, s) => sum + s.effectiveMonthlyCost, 0).toFixed(2),
       };
     }
 
@@ -128,6 +135,12 @@ async function executeTool(toolName, input) {
       const watchlist = await WatchlistItem.find({ userId })
         .populate('showId')
         .sort({ rank: 1 });
+      const subscriptions = await Subscription.find({ userId });
+      const infiniteServices = new Set(
+        subscriptions
+          .filter((sub) => sub.infiniteMembership && sub.status === 'active')
+          .map((sub) => sub.service)
+      );
 
       const totalItems = watchlist.length;
       const scores = {};
@@ -137,7 +150,8 @@ async function executeTool(toolName, input) {
           count: 0,
           weighted_score: 0,
           titles: [],
-          cost: price.monthly,
+          cost: infiniteServices.has(service) ? 0 : price.monthly,
+          infinite_membership: infiniteServices.has(service),
         };
       }
 
@@ -187,6 +201,11 @@ async function executeTool(toolName, input) {
             monthlyCost: SERVICE_PRICES[service].monthly,
             updatedAt: new Date(),
           },
+          $setOnInsert: {
+            userId,
+            service,
+            infiniteMembership: false,
+          },
         },
         { upsert: true }
       );
@@ -202,6 +221,17 @@ async function executeTool(toolName, input) {
     case 'cancel_subscription': {
       const { service } = input;
       const userId = await getUserId(input.user_id);
+      const existing = await Subscription.findOne({ userId, service });
+
+      if (existing?.infiniteMembership) {
+        return {
+          success: true,
+          service,
+          status: 'active',
+          infiniteMembership: true,
+          message: `${existing.displayName || service} has infinite membership and was kept active at $0/month.`,
+        };
+      }
 
       await Subscription.updateOne(
         { userId, service },

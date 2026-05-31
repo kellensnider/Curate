@@ -9,6 +9,7 @@ import { usePreferencesStore } from '../../store/usePreferencesStore';
 import { useSubscriptionStore } from '../../store/useSubscriptionStore';
 import { useBillingStore, type BillingCycle } from '../../store/useBillingStore';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
+import InfiniteMembershipControl from '../../components/subscriptions/InfiniteMembershipControl';
 
 const STEPS = ['Preferences', 'Your subscriptions', 'How long they last'];
 
@@ -23,7 +24,7 @@ export default function OnboardingPage() {
     setMaxSubscriptions,
     setShowsPerMonth,
   } = usePreferencesStore();
-  const { subscriptions, prices, fetchSubscriptions, fetchPrices, activate, cancel } =
+  const { subscriptions, prices, fetchSubscriptions, fetchPrices, activate, cancel, setInfiniteMembership } =
     useSubscriptionStore();
   const { entries, setEntry } = useBillingStore();
   const markComplete = useOnboardingStore((s) => s.markComplete);
@@ -42,17 +43,32 @@ export default function OnboardingPage() {
   }, []);
 
   const activeSubs = subscriptions.filter((s) => s.status === 'active');
-  const monthlyTotal = activeSubs.reduce((sum, s) => sum + s.monthlyCost, 0);
+  const monthlyTotal = activeSubs.reduce((sum, s) => sum + effectiveCost(s), 0);
 
   function priceOf(id: string) {
     return prices[id]?.monthly ?? SERVICES.find((s) => s.id === id)?.monthlyPrice ?? 0;
   }
 
+  function effectiveCost(sub: { monthlyCost: number; effectiveMonthlyCost?: number; infiniteMembership?: boolean }) {
+    return sub.infiniteMembership ? 0 : sub.effectiveMonthlyCost ?? sub.monthlyCost;
+  }
+
   async function toggle(id: string, isActive: boolean) {
+    const sub = subscriptions.find((s) => s.service === id);
+    if (sub?.infiniteMembership) return;
     setBusy(id);
     try {
       if (isActive) await cancel(id);
       else await activate(id);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function toggleInfiniteMembership(id: string, enabled: boolean) {
+    setBusy(id);
+    try {
+      await setInfiniteMembership(id, enabled);
     } finally {
       setBusy(null);
     }
@@ -240,40 +256,58 @@ export default function OnboardingPage() {
                   {SERVICES.map((svc) => {
                     const sub = subscriptions.find((s) => s.service === svc.id);
                     const isActive = sub?.status === 'active';
+                    const isInfinite = Boolean(sub?.infiniteMembership);
+                    const displayCost = sub ? effectiveCost(sub) : priceOf(svc.id);
                     return (
                       <div
                         key={svc.id}
-                        className={`rounded-xl border p-4 flex items-center gap-3 transition-all ${
+                        className={`rounded-xl border p-4 transition-all ${
                           isActive ? 'bg-zinc-900 border-zinc-700' : 'bg-zinc-900/40 border-zinc-800'
                         }`}
                       >
-                        <span
-                          className="w-3 h-3 rounded-full shrink-0"
-                          style={{ backgroundColor: isActive ? svc.brandColor : '#3f3f46' }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p
-                            className="text-sm font-bold"
-                            style={{ color: isActive ? svc.brandColor : '#71717a' }}
-                          >
-                            {svc.name}
-                          </p>
-                          <p className="text-xs text-zinc-500">${priceOf(svc.id).toFixed(2)}/mo</p>
-                        </div>
-                        <button
-                          onClick={() => toggle(svc.id, !!isActive)}
-                          disabled={busy === svc.id}
-                          className={`shrink-0 w-12 h-7 rounded-full relative transition-colors disabled:opacity-50 ${
-                            isActive ? 'bg-emerald-500' : 'bg-zinc-700'
-                          }`}
-                          aria-pressed={isActive}
-                        >
+                        <div className="flex items-start gap-3">
                           <span
-                            className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${
-                              isActive ? 'left-6' : 'left-1'
-                            }`}
+                            className="w-3 h-3 rounded-full shrink-0 mt-2"
+                            style={{ backgroundColor: isActive ? svc.brandColor : '#3f3f46' }}
                           />
-                        </button>
+                          <div className="flex-1 min-w-0">
+                            <p
+                              className="text-sm font-bold"
+                              style={{ color: isActive ? svc.brandColor : '#71717a' }}
+                            >
+                              {svc.name}
+                            </p>
+                            <p className="text-xs text-zinc-500">
+                              ${displayCost.toFixed(2)}/mo
+                              {isInfinite && (
+                                <span className="ml-2 text-zinc-600">
+                                  Normally ${priceOf(svc.id).toFixed(2)}/mo
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          <div className="shrink-0 space-y-2">
+                            <button
+                              onClick={() => toggle(svc.id, !!isActive)}
+                              disabled={busy === svc.id || isInfinite}
+                              className={`ml-auto block w-12 h-7 rounded-full relative transition-colors disabled:opacity-50 ${
+                                isActive ? 'bg-emerald-500' : 'bg-zinc-700'
+                              }`}
+                              aria-pressed={isActive}
+                            >
+                              <span
+                                className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${
+                                  isActive ? 'left-6' : 'left-1'
+                                }`}
+                              />
+                            </button>
+                            <InfiniteMembershipControl
+                              enabled={isInfinite}
+                              disabled={busy === svc.id}
+                              onChange={(enabled) => toggleInfiniteMembership(svc.id, enabled)}
+                            />
+                          </div>
+                        </div>
                       </div>
                     );
                   })}
@@ -297,6 +331,7 @@ export default function OnboardingPage() {
                     {activeSubs.map((sub) => {
                       const svc = SERVICES.find((s) => s.id === sub.service);
                       const entry = entries[sub.service];
+                      const isInfinite = Boolean(sub.infiniteMembership);
                       return (
                         <div
                           key={sub.service}
@@ -309,34 +344,42 @@ export default function OnboardingPage() {
                           <span className="text-sm font-semibold text-white w-24 shrink-0">
                             {svc?.name ?? sub.service}
                           </span>
-                          <input
-                            type="date"
-                            value={entry?.renewalDate ?? ''}
-                            onChange={(e) =>
-                              setEntry(
-                                sub.service,
-                                e.target.value,
-                                sub.monthlyCost,
-                                entry?.cycle ?? 'monthly',
-                              )
-                            }
-                            className="text-xs bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg focus:outline-none focus:border-zinc-500"
-                          />
-                          <select
-                            value={entry?.cycle ?? 'monthly'}
-                            onChange={(e) =>
-                              setEntry(
-                                sub.service,
-                                entry?.renewalDate ?? '',
-                                sub.monthlyCost,
-                                e.target.value as BillingCycle,
-                              )
-                            }
-                            className="text-xs bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg focus:outline-none focus:border-zinc-500 ml-auto"
-                          >
-                            <option value="monthly">Monthly</option>
-                            <option value="annual">Annual</option>
-                          </select>
+                          {isInfinite ? (
+                            <span className="ml-auto rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300">
+                              Infinite membership · $0/mo
+                            </span>
+                          ) : (
+                            <>
+                              <input
+                                type="date"
+                                value={entry?.renewalDate ?? ''}
+                                onChange={(e) =>
+                                  setEntry(
+                                    sub.service,
+                                    e.target.value,
+                                    effectiveCost(sub),
+                                    entry?.cycle ?? 'monthly',
+                                  )
+                                }
+                                className="text-xs bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg focus:outline-none focus:border-zinc-500"
+                              />
+                              <select
+                                value={entry?.cycle ?? 'monthly'}
+                                onChange={(e) =>
+                                  setEntry(
+                                    sub.service,
+                                    entry?.renewalDate ?? '',
+                                    effectiveCost(sub),
+                                    e.target.value as BillingCycle,
+                                  )
+                                }
+                                className="text-xs bg-zinc-800 border border-zinc-700 text-white px-2 py-1.5 rounded-lg focus:outline-none focus:border-zinc-500 ml-auto"
+                              >
+                                <option value="monthly">Monthly</option>
+                                <option value="annual">Annual</option>
+                              </select>
+                            </>
+                          )}
                         </div>
                       );
                     })}

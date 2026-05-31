@@ -82,7 +82,17 @@ export default function DashboardPage() {
   const watchlistShows = watchlistAsShows();
   const activeSubs = subscriptions.filter((s) => s.status === 'active');
   const activeServiceIds = activeSubs.map((s) => s.service);
-  const currentMonthly = activeSubs.reduce((sum, s) => sum + s.monthlyCost, 0);
+  const infiniteServiceIds = useMemo(
+    () =>
+      subscriptions
+        .filter((s) => s.status === 'active' && s.infiniteMembership)
+        .map((s) => s.service),
+    [subscriptions],
+  );
+  const currentMonthly = activeSubs.reduce(
+    (sum, s) => sum + (s.infiniteMembership ? 0 : s.effectiveMonthlyCost ?? s.monthlyCost),
+    0,
+  );
 
   // The editable selection (defaults to the recommended plan after an audit).
   const current = selectedPlan ?? optimizedPlan;
@@ -92,9 +102,11 @@ export default function DashboardPage() {
   const scheduledPlan: OptimizationResult | null = useMemo(
     () =>
       scheduledIds
-        ? planFromOptionIds(scheduledIds, watchlistShows.map((s) => s.id), watchlistShows)
+        ? planFromOptionIds(scheduledIds, watchlistShows.map((s) => s.id), watchlistShows, {
+            infiniteServiceIds,
+          })
         : null,
-    [scheduledIds, watchlistShows],
+    [scheduledIds, watchlistShows, infiniteServiceIds],
   );
 
   // What the timeline treats as "next month": the schedule wins; otherwise the
@@ -104,6 +116,10 @@ export default function DashboardPage() {
     : auditState === 'done' && current
     ? current.requiredServices.map((s) => s.id)
     : activeServiceIds;
+  const protectedPlannedServiceIds = useMemo(
+    () => Array.from(new Set([...plannedServiceIds, ...infiniteServiceIds])),
+    [plannedServiceIds, infiniteServiceIds],
+  );
 
   const isOptimal =
     !!optimizedPlan &&
@@ -132,7 +148,11 @@ export default function DashboardPage() {
         });
       }
     }
-    selectPlan(planFromOptionIds(next, watchlistShows.map((s) => s.id), watchlistShows));
+    selectPlan(
+      planFromOptionIds(next, watchlistShows.map((s) => s.id), watchlistShows, {
+        infiniteServiceIds,
+      }),
+    );
   }
 
   function useRecommended() {
@@ -171,9 +191,16 @@ export default function DashboardPage() {
   }
 
   // Services to flip to reach the chosen plan (schedule wins, else current selection).
-  const planServiceIds = (scheduledPlan ?? current)?.requiredServices.map((s) => s.id) ?? [];
+  const planServiceIds = Array.from(
+    new Set([
+      ...((scheduledPlan ?? current)?.requiredServices.map((s) => s.id) ?? []),
+      ...infiniteServiceIds,
+    ]),
+  );
   const toActivate = planServiceIds.filter((id) => !activeServiceIds.includes(id));
-  const toCancel = activeServiceIds.filter((id) => !planServiceIds.includes(id));
+  const toCancel = activeServiceIds.filter(
+    (id) => !planServiceIds.includes(id) && !infiniteServiceIds.includes(id),
+  );
   const hasChanges = toActivate.length > 0 || toCancel.length > 0;
 
   // Apply the plan now. Subscription state is updated server-side; if the plan
@@ -219,29 +246,30 @@ export default function DashboardPage() {
   type RowStatus = 'keep' | 'drop' | 'add';
   const rows = useMemo(() => {
     const ids = Array.from(
-      new Set([...activeServiceIds, ...plannedServiceIds, ...Object.keys(entries)]),
-    ).filter((id) => activeServiceIds.includes(id) || plannedServiceIds.includes(id));
+      new Set([...activeServiceIds, ...protectedPlannedServiceIds, ...Object.keys(entries)]),
+    ).filter((id) => activeServiceIds.includes(id) || protectedPlannedServiceIds.includes(id));
 
     return ids
       .map((id) => {
         const svc = SERVICES.find((s) => s.id === id);
         const isActive = activeServiceIds.includes(id);
-        const isPlanned = plannedServiceIds.includes(id);
-        const entry = entries[id];
+        const isPlanned = protectedPlannedServiceIds.includes(id);
+        const isInfinite = infiniteServiceIds.includes(id);
+        const entry = isInfinite ? undefined : entries[id];
         const monthsLeft = getMonthsUntilRenewal(id);
-        const annual = entry?.cycle === 'annual';
+        const annual = !isInfinite && entry?.cycle === 'annual';
 
         const status: RowStatus = isActive && isPlanned ? 'keep' : isActive ? 'drop' : 'add';
 
         const covered = watchlistShows.filter((s) => s.streamingServices.includes(id));
 
-        return { id, svc, status, annual, monthsLeft, entry, covered };
+        return { id, svc, status, annual, monthsLeft, entry, covered, isInfinite };
       })
       .sort((a, b) => {
         const order = { drop: 0, keep: 1, add: 2 };
         return order[a.status] - order[b.status];
       });
-  }, [activeServiceIds, plannedServiceIds, entries, watchlistShows, getMonthsUntilRenewal]);
+  }, [activeServiceIds, protectedPlannedServiceIds, infiniteServiceIds, entries, watchlistShows, getMonthsUntilRenewal]);
 
   const annualRows = rows.filter((r) => r.annual && r.monthsLeft !== null);
 

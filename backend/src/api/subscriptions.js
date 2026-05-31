@@ -6,14 +6,20 @@ const { requireAuth } = require('../middleware/auth');
 const { ensureDefaultSubscriptions } = require('../services/subscriptionService');
 
 function serializeSubscription(subscription) {
+  const infiniteMembership = Boolean(subscription.infiniteMembership);
+  const effectiveMonthlyCost = infiniteMembership ? 0 : subscription.monthlyCost;
+
   return {
     _id: subscription._id,
     userId: subscription.userId,
     service: subscription.service,
     displayName: subscription.displayName,
-    status: subscription.status,
+    status: infiniteMembership ? 'active' : subscription.status,
     monthlyCost: subscription.monthlyCost,
     monthly_cost: subscription.monthlyCost,
+    infiniteMembership,
+    effectiveMonthlyCost,
+    effective_monthly_cost: effectiveMonthlyCost,
     updatedAt: subscription.updatedAt,
   };
 }
@@ -30,7 +36,7 @@ async function getSubscriptionsForUser(userId) {
     });
 
   const active = subscriptions.filter(s => s.status === 'active');
-  const totalCost = active.reduce((sum, s) => sum + s.monthlyCost, 0);
+  const totalCost = active.reduce((sum, s) => sum + s.effectiveMonthlyCost, 0);
 
   return {
     subscriptions,
@@ -39,21 +45,50 @@ async function getSubscriptionsForUser(userId) {
   };
 }
 
-async function setSubscriptionStatus(userId, service, status) {
+function readInfiniteMembership(value) {
+  if (typeof value === 'undefined') return undefined;
+  if (typeof value !== 'boolean') {
+    const err = new Error('infiniteMembership must be a boolean');
+    err.status = 400;
+    throw err;
+  }
+  return value;
+}
+
+async function setSubscriptionStatus(userId, service, status, options = {}) {
   if (!service || !SERVICE_PRICES[service]) {
     const err = new Error('Invalid service');
     err.status = 400;
     throw err;
   }
 
-  await Subscription.findOneAndUpdate(
+  const infiniteMembership = readInfiniteMembership(options.infiniteMembership);
+  const existing = await Subscription.findOne({ userId, service });
+
+  if (status === 'cancelled' && existing?.infiniteMembership && infiniteMembership !== false) {
+    return existing;
+  }
+
+  const nextInfiniteMembership = infiniteMembership ?? Boolean(existing?.infiniteMembership);
+  const nextStatus = nextInfiniteMembership ? 'active' : status;
+  const set = {
+    displayName: SERVICE_PRICES[service].name,
+    status: nextStatus,
+    monthlyCost: SERVICE_PRICES[service].monthly,
+    updatedAt: new Date(),
+  };
+
+  if (typeof infiniteMembership !== 'undefined') {
+    set.infiniteMembership = infiniteMembership;
+  }
+
+  return Subscription.findOneAndUpdate(
     { userId, service },
     {
-      $set: {
-        displayName: SERVICE_PRICES[service].name,
-        status,
-        monthlyCost: SERVICE_PRICES[service].monthly,
-        updatedAt: new Date(),
+      $set: set,
+      $setOnInsert: {
+        userId,
+        service,
       },
     },
     { upsert: true, new: true }
@@ -73,12 +108,16 @@ router.get('/', requireAuth, async (req, res) => {
 // POST /api/subscriptions/activate
 router.post('/activate', requireAuth, async (req, res) => {
   try {
-    await setSubscriptionStatus(req.user.id, req.body.service, 'active');
+    const subscription = await setSubscriptionStatus(req.user.id, req.body.service, 'active', {
+      infiniteMembership: req.body.infiniteMembership,
+    });
+    const serialized = serializeSubscription(subscription);
     res.json({
       success: true,
       service: req.body.service,
-      status: 'active',
-      cost: SERVICE_PRICES[req.body.service].monthly,
+      status: serialized.status,
+      cost: serialized.effectiveMonthlyCost,
+      subscription: serialized,
     });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Failed to activate subscription' });
@@ -88,8 +127,9 @@ router.post('/activate', requireAuth, async (req, res) => {
 // POST /api/subscriptions/cancel
 router.post('/cancel', requireAuth, async (req, res) => {
   try {
-    await setSubscriptionStatus(req.user.id, req.body.service, 'cancelled');
-    res.json({ success: true, service: req.body.service, status: 'cancelled' });
+    const subscription = await setSubscriptionStatus(req.user.id, req.body.service, 'cancelled');
+    const serialized = serializeSubscription(subscription);
+    res.json({ success: true, service: req.body.service, status: serialized.status, subscription: serialized });
   } catch (err) {
     res.status(err.status || 500).json({ error: err.message || 'Failed to cancel subscription' });
   }
@@ -135,9 +175,12 @@ router.post('/:userId/activate', async (req, res) => {
   const userId = await resolveDemoUserId(req.params.userId);
   if (!userId) return res.status(404).json({ error: 'User not found. Run npm run seed first.' });
 
-  await setSubscriptionStatus(userId, service, 'active');
+  const subscription = await setSubscriptionStatus(userId, service, 'active', {
+    infiniteMembership: req.body.infiniteMembership,
+  });
+  const serialized = serializeSubscription(subscription);
 
-  res.json({ success: true, service, status: 'active', cost: SERVICE_PRICES[service].monthly });
+  res.json({ success: true, service, status: serialized.status, cost: serialized.effectiveMonthlyCost, subscription: serialized });
 });
 
 // POST /api/subscriptions/:userId/cancel
@@ -148,9 +191,10 @@ router.post('/:userId/cancel', async (req, res) => {
   const userId = await resolveDemoUserId(req.params.userId);
   if (!userId) return res.status(404).json({ error: 'User not found. Run npm run seed first.' });
 
-  await setSubscriptionStatus(userId, service, 'cancelled');
+  const subscription = await setSubscriptionStatus(userId, service, 'cancelled');
+  const serialized = serializeSubscription(subscription);
 
-  res.json({ success: true, service, status: 'cancelled' });
+  res.json({ success: true, service, status: serialized.status, subscription: serialized });
 });
 
 // POST /api/subscriptions/:userId/apply  { activate: string[], cancel: string[] }
