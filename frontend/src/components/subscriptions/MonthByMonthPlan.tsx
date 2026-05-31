@@ -1,10 +1,12 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { SERVICES, ALL_SERVICES_TOTAL, type WatchPlan } from '../../lib/mockData';
+import { ALL_SERVICES_TOTAL, type WatchPlan } from '../../lib/mockData';
 
 interface MonthByMonthPlanProps {
   plan: WatchPlan;
+  /** Services the user owns outright (unlimited / $0) — tagged in each month. */
+  infiniteServiceIds?: string[];
 }
 
 function monthLabel(monthIndex: number): string {
@@ -22,8 +24,9 @@ function monthLabel(monthIndex: number): string {
  * shows the services you'll be subscribed to that month and poster art for the
  * titles you'll watch, assuming you finish your monthly quota before moving on.
  */
-export default function MonthByMonthPlan({ plan }: MonthByMonthPlanProps) {
+export default function MonthByMonthPlan({ plan, infiniteServiceIds = [] }: MonthByMonthPlanProps) {
   if (plan.months.length === 0) return null;
+  const infinite = new Set(infiniteServiceIds);
 
   // What buying every service for the same number of months would cost.
   const naiveCost = ALL_SERVICES_TOTAL * plan.months.length;
@@ -80,20 +83,24 @@ export default function MonthByMonthPlan({ plan }: MonthByMonthPlanProps) {
               <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-600 mb-2">
                 Subscribed to
               </p>
-              {m.plan.purchases.length === 0 ? (
+              {m.plan.requiredServices.length === 0 ? (
                 <span className="text-xs text-zinc-500">No subscription</span>
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  {m.plan.purchases.map((p) => {
-                    const color =
-                      SERVICES.find((s) => s.id === p.services[0])?.brandColor ?? '#52525b';
+                  {m.plan.requiredServices.map((svc) => {
+                    const owned = infinite.has(svc.id);
                     return (
-                      <span key={p.id} className="flex items-center gap-2 text-xs font-semibold text-white">
+                      <span key={svc.id} className="flex items-center gap-2 text-xs font-semibold text-white">
                         <span
                           className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: color }}
+                          style={{ backgroundColor: svc.brandColor }}
                         />
-                        {p.name}
+                        <span className="truncate">{svc.name}</span>
+                        {owned && (
+                          <span className="ml-auto text-[10px] font-semibold text-emerald-400 shrink-0">
+                            $0
+                          </span>
+                        )}
                       </span>
                     );
                   })}

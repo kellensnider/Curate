@@ -384,19 +384,18 @@ export function planMultiMonth(
 
   const byId = new Map(pool.map((s) => [s.id, s]));
   const watched = new Set(watchedIds);
-  const infiniteServices = new Set(infiniteServiceIds);
   // Ranked (most-wanted first), unwatched, resolvable titles.
   const unwatched = rankedShowIds
     .filter((id) => !watched.has(id))
     .map((id) => byId.get(id))
     .filter((s): s is Show => Boolean(s));
 
-  // Titles already covered by an infinite ($0) membership are free to watch
-  // anytime — pull them out of the paid backlog entirely (the user asked us to
-  // treat those services and their shows as already accounted for).
-  const isFree = (s: Show) => s.streamingServices.some((svc) => infiniteServices.has(svc));
-  const freeShows = unwatched.filter(isFree);
-  let remaining = unwatched.filter((s) => !isFree(s));
+  // Every unwatched title stays in the backlog — including ones already covered
+  // by an infinite ($0) membership. Those add no cost (infinite services are
+  // granted for free each month), but they still get scheduled and paced, so the
+  // forecast accounts for the whole watchlist and spans as many months as it
+  // takes to finish it.
+  let remaining = unwatched;
 
   const months: MonthPlan[] = [];
   const perMonth = Math.max(1, Math.floor(showsPerMonth));
@@ -439,6 +438,8 @@ export function planMultiMonth(
     monthsToFinish: months.length,
     // Whatever's left once we stop is unreachable within budget/horizon.
     unreachable: remaining,
-    freeShows,
+    // Infinite-membership titles are now scheduled into the months above rather
+    // than split out, so nothing lands here.
+    freeShows: [],
   };
 }
