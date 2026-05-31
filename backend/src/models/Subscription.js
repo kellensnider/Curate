@@ -9,6 +9,7 @@ const SERVICE_KEYS = [
   'prime',
   'appletv',
   'paramount',
+  'tubi',
 ];
 
 const subscriptionSchema = new mongoose.Schema({

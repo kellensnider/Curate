@@ -26,6 +26,27 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
+// The Curate password is kept in sessionStorage (per-tab, cleared on tab close
+// and sign-out) so the automation agent can reuse it across a refresh — but it
+// never lands in localStorage.
+const PW_KEY = 'curate-pw';
+function readSessionPw(): string | null {
+  try {
+    return typeof window !== 'undefined' ? window.sessionStorage.getItem(PW_KEY) : null;
+  } catch {
+    return null;
+  }
+}
+function writeSessionPw(pw: string | null) {
+  try {
+    if (typeof window === 'undefined') return;
+    if (pw) window.sessionStorage.setItem(PW_KEY, pw);
+    else window.sessionStorage.removeItem(PW_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 function userState(user: AuthUser) {
   return {
     isAuthenticated: true,
@@ -43,7 +64,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       userName: '',
       userEmail: '',
-      accountPassword: null,
+      accountPassword: readSessionPw(),
       loading: false,
       error: null,
 
@@ -69,6 +90,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user, token } = await apiLogin(email, password);
           setAuthToken(token);
+          writeSessionPw(password);
           set({ ...userState(user), accountPassword: password, loading: false });
         } catch (err) {
           set({ loading: false, error: err instanceof Error ? err.message : 'Login failed' });
@@ -81,6 +103,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user, token } = await apiSignup(name, email, password);
           setAuthToken(token);
+          writeSessionPw(password);
           set({ ...userState(user), accountPassword: password, loading: false });
         } catch (err) {
           set({ loading: false, error: err instanceof Error ? err.message : 'Signup failed' });
@@ -95,6 +118,7 @@ export const useAuthStore = create<AuthState>()(
           /* local logout still succeeds if backend is unavailable */
         }
         clearAuthToken();
+        writeSessionPw(null);
         set({
           isAuthenticated: false,
           user: null,

@@ -53,6 +53,7 @@ export const SERVICES: Service[] = [
   { id: 'peacock', name: 'Peacock', monthlyPrice: 7.99, brandColor: '#FFD700', logo: 'PEACOCK' },
   { id: 'paramount', name: 'Paramount+', monthlyPrice: 7.99, brandColor: '#0064FF', logo: 'PARAMOUNT+' },
   { id: 'prime', name: 'Prime Video', monthlyPrice: 8.99, brandColor: '#00A8E1', logo: 'PRIME' },
+  { id: 'tubi', name: 'Tubi', monthlyPrice: 0, brandColor: '#7408FF', logo: 'TUBI' },
 ];
 
 export const SHOWS: Show[] = (catalogData as Show[])

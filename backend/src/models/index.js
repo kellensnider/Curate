@@ -14,6 +14,7 @@ const SERVICE_PRICES = {
   prime: { name: 'Prime Video', monthly: 8.99 },
   appletv: { name: 'Apple TV+', monthly: 9.99 },
   paramount: { name: 'Paramount+', monthly: 7.99 },
+  tubi: { name: 'Tubi', monthly: 0 },
 };
 
 function serializeShow(show) {
