@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 
 const NAV_LINKS = [
@@ -15,10 +16,14 @@ const NAV_LINKS = [
 export default function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated, userName, signOut } = useAuthStore();
+  const { isAuthenticated, userName, signOut, hydrateUser } = useAuthStore();
 
-  function handleSignOut() {
-    signOut();
+  useEffect(() => {
+    hydrateUser();
+  }, [hydrateUser]);
+
+  async function handleSignOut() {
+    await signOut();
     router.push('/');
   }
 
@@ -29,7 +34,6 @@ export default function Navbar() {
           curate
         </Link>
 
-        {/* Nav links — only when signed in */}
         {isAuthenticated && (
           <div className="hidden md:flex items-center gap-0.5 flex-1">
             {NAV_LINKS.map((link) => (
@@ -48,7 +52,6 @@ export default function Navbar() {
           </div>
         )}
 
-        {/* Auth */}
         <div className="ml-auto flex items-center gap-3 shrink-0">
           {isAuthenticated ? (
             <>

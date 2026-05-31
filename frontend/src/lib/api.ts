@@ -1,9 +1,24 @@
 import type { Show } from './mockData';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
-export const USER_ID = 1;
+const TOKEN_KEY = 'curate-token';
 
-// ─── Backend shapes ──────────────────────────────────────────────────────────
+export interface AuthUser {
+  id: string;
+  name: string;
+  email: string;
+  preferences?: {
+    maxMonthlyBudget: number;
+    maxActiveServices: number;
+    allowAutoSubscribe: boolean;
+    allowAutoCancel: boolean;
+  };
+}
+
+export interface AuthResponse {
+  user: AuthUser;
+  token: string;
+}
 
 export interface BackendShow {
   _id?: string;
@@ -58,26 +73,68 @@ export interface AgentEvent {
   history?: unknown[];
 }
 
-// ─── HTTP helper ─────────────────────────────────────────────────────────────
+export function getAuthToken() {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(TOKEN_KEY);
+}
+
+export function setAuthToken(token: string) {
+  if (typeof window !== 'undefined') {
+    window.localStorage.setItem(TOKEN_KEY, token);
+  }
+}
+
+export function clearAuthToken() {
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(TOKEN_KEY);
+  }
+}
 
 async function req<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`API ${res.status} ${path}: ${body}`);
+  const headers = new Headers(options?.headers);
+  if (!headers.has('Content-Type') && options?.body) {
+    headers.set('Content-Type', 'application/json');
   }
+
+  const token = getAuthToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+
+  const res = await fetch(`${BASE}${path}`, {
+    credentials: 'include',
+    ...options,
+    headers,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.error || `API ${res.status} ${path}`);
+  }
+
   return res.json();
 }
 
-// ─── Health ──────────────────────────────────────────────────────────────────
+export const signup = (name: string, email: string, password: string) =>
+  req<AuthResponse>('/api/auth/signup', {
+    method: 'POST',
+    body: JSON.stringify({ name, email, password }),
+  });
+
+export const login = (email: string, password: string) =>
+  req<AuthResponse>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+
+export const logout = () =>
+  req<{ success: boolean }>('/api/auth/logout', { method: 'POST' });
+
+export const getCurrentUser = () =>
+  req<{ user: AuthUser }>('/api/auth/me');
 
 export const checkHealth = () =>
   req<{ status: string }>('/api/health');
-
-// ─── Shows ───────────────────────────────────────────────────────────────────
 
 export const getPopularShows = () =>
   req<BackendShow[]>('/api/shows/popular');
@@ -90,68 +147,66 @@ export const searchShows = (q: string, genre?: string, service?: string) => {
   return req<BackendShow[]>(`/api/shows?${p}`);
 };
 
-// ─── Watchlist ────────────────────────────────────────────────────────────────
-
 export const getWatchlist = () =>
-  req<BackendWatchlistItem[]>(`/api/watchlist/${USER_ID}`);
+  req<BackendWatchlistItem[]>('/api/watchlist');
 
 export const addToWatchlist = (showId: string) =>
   req<{ success: boolean; rank: number; show: BackendShow }>(
-    `/api/watchlist/${USER_ID}`,
+    '/api/watchlist',
     { method: 'POST', body: JSON.stringify({ show_id: showId }) },
   );
 
 export const removeFromWatchlist = (showId: string) =>
-  req<{ success: boolean }>(`/api/watchlist/${USER_ID}/${showId}`, {
+  req<{ success: boolean }>(`/api/watchlist/${showId}`, {
     method: 'DELETE',
   });
 
 export const reorderWatchlist = (items: { show_id: string; rank: number }[]) =>
-  req<{ success: boolean }>(`/api/watchlist/${USER_ID}/rank`, {
+  req<{ success: boolean }>('/api/watchlist/rank', {
     method: 'PUT',
     body: JSON.stringify({ items }),
   });
-
-// ─── Subscriptions ────────────────────────────────────────────────────────────
 
 export const getSubscriptions = () =>
   req<{
     subscriptions: BackendSubscription[];
     active_count: number;
     monthly_total: number;
-  }>(`/api/subscriptions/${USER_ID}`);
+  }>('/api/subscriptions');
 
 export const getServicePrices = () =>
   req<Record<string, ServicePrice>>('/api/subscriptions/prices/all');
 
 export const activateService = (service: string) =>
   req<{ success: boolean; cost: number }>(
-    `/api/subscriptions/${USER_ID}/activate`,
+    '/api/subscriptions/activate',
     { method: 'POST', body: JSON.stringify({ service }) },
   );
 
 export const cancelService = (service: string) =>
   req<{ success: boolean }>(
-    `/api/subscriptions/${USER_ID}/cancel`,
+    '/api/subscriptions/cancel',
     { method: 'POST', body: JSON.stringify({ service }) },
   );
 
-/** Apply a whole plan at once — runs the MCP tool functions server-side. */
 export const applyPlan = (activate: string[], cancel: string[]) =>
   req<{ success: boolean; activated: string[]; cancelled: string[] }>(
-    `/api/subscriptions/${USER_ID}/apply`,
+    '/api/subscriptions/apply',
     { method: 'POST', body: JSON.stringify({ activate, cancel }) },
   );
-
-// ─── Agent (SSE streaming) ────────────────────────────────────────────────────
 
 export async function* streamAgentChat(
   message: string,
   history: unknown[] = [],
 ): AsyncGenerator<AgentEvent> {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const token = getAuthToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
   const res = await fetch(`${BASE}/api/agent/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    headers,
     body: JSON.stringify({ message, history }),
   });
 
@@ -182,14 +237,11 @@ export async function* streamAgentChat(
   }
 }
 
-// ─── Shape adapter ────────────────────────────────────────────────────────────
-
 export function adaptShow(s: BackendShow): Show {
   return {
     id: s.externalId ?? (s as any)._id ?? '',
     title: s.title,
     type: s.type ?? 'movie',
-    // Use the real catalog poster; fall back to a placeholder only if missing.
     posterUrl: s.posterUrl || `https://picsum.photos/seed/${encodeURIComponent(s.title)}/300/450`,
     backdropUrl: s.backdropUrl,
     overview: s.overview,

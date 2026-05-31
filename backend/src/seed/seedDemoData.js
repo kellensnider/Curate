@@ -1,5 +1,6 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 const shows = require('../../../data/shows.json');
 const { connectDB } = require('../config/db');
 const {
@@ -40,7 +41,11 @@ async function seedDemoData() {
       AgentAction.deleteMany({}),
     ]);
 
-    const demoUser = await User.create({});
+    const demoUser = await User.create({
+      name: 'Demo User',
+      email: 'demo@example.com',
+      passwordHash: await bcrypt.hash('password123', 12),
+    });
     const insertedShows = await Show.insertMany(shows.map(mapSeedShow));
 
     const subscriptions = Object.entries(SERVICE_PRICES).map(([service, price]) => ({
@@ -69,6 +74,7 @@ async function seedDemoData() {
     console.log(`Shows inserted: ${insertedShows.length}`);
     console.log(`Watchlist items inserted: ${starterShows.length}`);
     console.log(`Subscriptions inserted: ${subscriptions.length}`);
+    console.log('Demo login: demo@example.com / password123');
     console.log(`Demo user ObjectId: ${demoUser._id}`);
   } finally {
     await mongoose.connection.close();

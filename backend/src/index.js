@@ -1,40 +1,41 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 
+const authRoutes = require('./api/auth');
 const showsRouter = require('./api/shows');
 const watchlistRouter = require('./api/watchlist');
 const subscriptionsRouter = require('./api/subscriptions');
 const { runAgentStream } = require('./agent/index');
 const { connectDB } = require('./config/db');
+const { requireAuth } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-// In production set ALLOWED_ORIGIN to the frontend URL (comma-separated for
-// multiple). Unset = allow all origins (convenient for local dev).
-const allowedOrigin = process.env.ALLOWED_ORIGIN;
-app.use(
-  cors(
-    allowedOrigin
-      ? { origin: allowedOrigin.split(',').map((o) => o.trim()) }
-      : undefined,
-  ),
-);
+const allowedOrigin = process.env.ALLOWED_ORIGIN || FRONTEND_URL;
+app.use(cors({
+  origin: allowedOrigin.split(',').map((origin) => origin.trim()),
+  credentials: true,
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 // Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/shows', showsRouter);
 app.use('/api/watchlist', watchlistRouter);
 app.use('/api/subscriptions', subscriptionsRouter);
 
 // Agent chat streaming SSE endpoint
-app.post('/api/agent/chat', async (req, res) => {
+app.post('/api/agent/chat', requireAuth, async (req, res) => {
   const { message, history = [] } = req.body;
   if (!message) return res.status(400).json({ error: 'message required' });
 
   try {
-    await runAgentStream(message, history, res);
+    await runAgentStream(message, history, res, req.user.id);
   } catch (err) {
     console.error('Agent error:', err);
     if (!res.headersSent) {
@@ -46,6 +47,12 @@ app.post('/api/agent/chat', async (req, res) => {
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+app.use((err, req, res, next) => {
+  console.error('Request error:', err.message);
+  if (res.headersSent) return next(err);
+  res.status(500).json({ error: 'Server error' });
 });
 
 async function startServer() {

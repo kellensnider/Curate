@@ -18,13 +18,10 @@ export default function HomePage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
 
-  // Signed-in users don't need the marketing page — send them to the dashboard.
   useEffect(() => {
     if (isAuthenticated) router.replace('/dashboard');
   }, [isAuthenticated, router]);
 
-  // A poster wall built from the local catalog — no backend needed for the
-  // landing page so it always renders, even before sign-in.
   const posters = useMemo(() => {
     const withPosters = SHOWS.filter((s) => s.posterUrl);
     return withPosters.slice(0, 56);
@@ -34,7 +31,6 @@ export default function HomePage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-zinc-950">
-      {/* Poster wall background */}
       <div className="absolute inset-0">
         <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-1.5 p-1.5 opacity-40">
           {posters.map((show) => (
@@ -50,11 +46,9 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Gradient scrim for legibility */}
       <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/70 via-zinc-950/85 to-zinc-950" />
       <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-transparent to-zinc-950/80" />
 
-      {/* Top bar */}
       <header className="relative z-10 max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
         <span className="text-white font-black text-2xl tracking-tight">curate</span>
         <div className="flex items-center gap-3">
@@ -73,7 +67,6 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero */}
       <main className="relative z-10 max-w-4xl mx-auto px-5 sm:px-8 pt-16 sm:pt-24 pb-20 text-center">
         <motion.h1
           initial={{ opacity: 0, y: 24 }}
@@ -92,7 +85,7 @@ export default function HomePage() {
           transition={{ delay: 0.15, duration: 0.5 }}
           className="text-zinc-300 text-lg sm:text-xl mt-6 max-w-2xl mx-auto font-medium"
         >
-          Curate builds your watchlist a month at a time — keeping only the one or
+          Curate builds your watchlist a month at a time - keeping only the one or
           two streaming services that cover what you actually watch, and canceling
           the rest.
         </motion.p>
@@ -107,7 +100,7 @@ export default function HomePage() {
             href="/auth?mode=signup"
             className="w-full sm:w-auto bg-white text-black font-bold text-base px-8 py-3.5 rounded-xl hover:bg-zinc-200 active:scale-95 transition-all"
           >
-            Get started — it's free
+            Get started - it's free
           </Link>
           <Link
             href="/auth?mode=signin"
@@ -117,7 +110,6 @@ export default function HomePage() {
           </Link>
         </motion.div>
 
-        {/* Big stats */}
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}

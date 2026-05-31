@@ -17,10 +17,16 @@ When making recommendations:
 7. After delivering your recommendation, ask if they'd like you to apply the changes
 8. When applying changes, use activate_subscription and cancel_subscription tools
 
-The demo user (user_id: 1) is set up with active subscriptions already. Be conversational but efficient.`;
+Be conversational but efficient.`;
+
+function buildSystemPrompt(userId) {
+  return `${SYSTEM_PROMPT}
+
+The authenticated user's user_id is "${userId}". Use this exact user_id when calling tools.`;
+}
 
 // Run the full agent loop with streaming to a response object
-async function runAgentStream(userMessage, conversationHistory = [], res) {
+async function runAgentStream(userMessage, conversationHistory = [], res, userId) {
   const messages = [
     ...conversationHistory,
     { role: 'user', content: userMessage }
@@ -29,7 +35,6 @@ async function runAgentStream(userMessage, conversationHistory = [], res) {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
-  res.setHeader('Access-Control-Allow-Origin', '*');
 
   const sendEvent = (data) => {
     res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -42,7 +47,7 @@ async function runAgentStream(userMessage, conversationHistory = [], res) {
     const response = await anthropic.messages.create({
       model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
       max_tokens: 2048,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(userId),
       tools: MCP_TOOLS,
       messages: allMessages,
       stream: true,

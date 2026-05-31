@@ -15,7 +15,7 @@ const MCP_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        user_id: { type: 'number', description: 'The user ID (use 1 for demo)' },
+        user_id: { type: 'string', description: 'The authenticated MongoDB user ID' },
       },
       required: ['user_id'],
     },
@@ -26,7 +26,7 @@ const MCP_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        user_id: { type: 'number', description: 'The user ID (use 1 for demo)' },
+        user_id: { type: 'string', description: 'The authenticated MongoDB user ID' },
       },
       required: ['user_id'],
     },
@@ -37,7 +37,7 @@ const MCP_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        user_id: { type: 'number', description: 'The user ID (use 1 for demo)' },
+        user_id: { type: 'string', description: 'The authenticated MongoDB user ID' },
       },
       required: ['user_id'],
     },
@@ -56,7 +56,7 @@ const MCP_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        user_id: { type: 'number' },
+        user_id: { type: 'string' },
         service: { type: 'string', description: 'Service key: netflix, hulu, disney, max, peacock, prime, appletv, paramount' },
       },
       required: ['user_id', 'service'],
@@ -68,7 +68,7 @@ const MCP_TOOLS = [
     input_schema: {
       type: 'object',
       properties: {
-        user_id: { type: 'number' },
+        user_id: { type: 'string' },
         service: { type: 'string', description: 'Service key: netflix, hulu, disney, max, peacock, prime, appletv, paramount' },
       },
       required: ['user_id', 'service'],
@@ -78,7 +78,7 @@ const MCP_TOOLS = [
 
 async function getUserId(inputUserId) {
   const userId = await resolveDemoUserId(inputUserId);
-  if (!userId) throw new Error('Demo user not found. Run npm run seed first.');
+  if (!userId) throw new Error('User not found.');
   return userId;
 }
 

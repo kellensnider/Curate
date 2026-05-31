@@ -7,6 +7,7 @@ const {
   resolveDemoUserId,
   serializeShow,
 } = require('../models');
+const { requireAuth } = require('../middleware/auth');
 
 async function findShow(showId) {
   if (mongoose.Types.ObjectId.isValid(showId)) {
@@ -17,16 +18,8 @@ async function findShow(showId) {
   return Show.findOne({ externalId: showId });
 }
 
-// GET /api/watchlist/:userId - get ranked watchlist with show details
-router.get('/:userId', async (req, res) => {
-  const userId = await resolveDemoUserId(req.params.userId);
-  if (!userId) return res.json([]);
-
-  const items = await WatchlistItem.find({ userId })
-    .populate('showId')
-    .sort({ rank: 1 });
-
-  res.json(items.map((item) => ({
+function serializeWatchlistItem(item) {
+  return {
     _id: item._id,
     userId: item.userId,
     showId: item.showId?._id,
@@ -34,7 +27,90 @@ router.get('/:userId', async (req, res) => {
     rank: item.rank,
     createdAt: item.createdAt,
     show: serializeShow(item.showId),
-  })).filter((item) => item.show));
+  };
+}
+
+async function getWatchlistForUser(userId) {
+  const items = await WatchlistItem.find({ userId })
+    .populate('showId')
+    .sort({ rank: 1 });
+
+  return items.map(serializeWatchlistItem).filter((item) => item.show);
+}
+
+async function addShowForUser(userId, showId) {
+  if (!showId) {
+    const err = new Error('show_id required');
+    err.status = 400;
+    throw err;
+  }
+
+  const show = await findShow(showId);
+  if (!show) {
+    const err = new Error('Show not found');
+    err.status = 404;
+    throw err;
+  }
+
+  const lastItem = await WatchlistItem.findOne({ userId }).sort({ rank: -1 });
+  const newRank = (lastItem?.rank || 0) + 1;
+
+  await WatchlistItem.create({ userId, showId: show._id, rank: newRank });
+  return { rank: newRank, show };
+}
+
+// GET /api/watchlist - authenticated user's ranked watchlist
+router.get('/', requireAuth, async (req, res) => {
+  res.json(await getWatchlistForUser(req.user.id));
+});
+
+// POST /api/watchlist - add show to authenticated user's watchlist
+router.post('/', requireAuth, async (req, res) => {
+  try {
+    const { rank, show } = await addShowForUser(req.user.id, req.body.show_id || req.body.showId);
+    res.json({ success: true, rank, show: serializeShow(show) });
+  } catch (err) {
+    if (err.code === 11000) return res.status(409).json({ error: 'Already in watchlist' });
+    return res.status(err.status || 500).json({ error: err.message || 'Failed to add show' });
+  }
+});
+
+// PUT /api/watchlist/rank - reorder authenticated user's watchlist
+router.put('/rank', requireAuth, async (req, res) => {
+  const { items } = req.body;
+  if (!Array.isArray(items)) return res.status(400).json({ error: 'items array required' });
+
+  for (const item of items) {
+    const show = await findShow(item.show_id || item.showId);
+    if (!show) continue;
+    await WatchlistItem.updateOne(
+      { userId: req.user.id, showId: show._id },
+      { $set: { rank: item.rank } }
+    );
+  }
+
+  res.json({ success: true });
+});
+
+// DELETE /api/watchlist/:showId - remove from authenticated user's watchlist
+router.delete('/:showId', requireAuth, async (req, res, next) => {
+  try {
+    const show = await findShow(req.params.showId);
+    if (show) {
+      await WatchlistItem.deleteOne({ userId: req.user.id, showId: show._id });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/watchlist/:userId - get ranked watchlist with show details
+router.get('/:userId', async (req, res) => {
+  const userId = await resolveDemoUserId(req.params.userId);
+  if (!userId) return res.json([]);
+
+  res.json(await getWatchlistForUser(userId));
 });
 
 // POST /api/watchlist/:userId - add show to watchlist
@@ -45,15 +121,9 @@ router.post('/:userId', async (req, res) => {
   if (!show_id) return res.status(400).json({ error: 'show_id required' });
   if (!userId) return res.status(404).json({ error: 'User not found. Run npm run seed first.' });
 
-  const show = await findShow(show_id);
-  if (!show) return res.status(404).json({ error: 'Show not found' });
-
-  const lastItem = await WatchlistItem.findOne({ userId }).sort({ rank: -1 });
-  const newRank = (lastItem?.rank || 0) + 1;
-
   try {
-    await WatchlistItem.create({ userId, showId: show._id, rank: newRank });
-    res.json({ success: true, rank: newRank, show: serializeShow(show) });
+    const { rank, show } = await addShowForUser(userId, show_id);
+    res.json({ success: true, rank, show: serializeShow(show) });
   } catch (err) {
     if (err.code === 11000) {
       return res.status(409).json({ error: 'Already in watchlist' });
