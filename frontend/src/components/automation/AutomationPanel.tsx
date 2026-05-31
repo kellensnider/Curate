@@ -45,8 +45,9 @@ export default function AutomationPanel() {
         </span>
       </div>
       <p className="text-xs text-zinc-500 mb-4">
-        Have Curate sign in / out of Tubi for you. Use your own account —
-        credentials are sent once for the run and never stored.
+        Have Curate create a Tubi account (or sign in if it exists) and cancel it
+        for you. Use a real address you control — credentials are sent once for
+        the run and never stored.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
@@ -74,7 +75,7 @@ export default function AutomationPanel() {
           disabled={!!busy}
           className="flex-1 bg-emerald-500 text-white text-sm font-bold py-2.5 rounded-lg hover:bg-emerald-400 disabled:opacity-50 transition"
         >
-          {busy === 'subscribe' ? 'Signing in…' : 'Subscribe (sign in)'}
+          {busy === 'subscribe' ? 'Creating account…' : 'Subscribe (create account)'}
         </button>
         <button
           onClick={() => run('unsubscribe')}

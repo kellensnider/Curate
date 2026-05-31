@@ -85,20 +85,28 @@ async function dismissBanners(page) {
   }
 }
 
-// Logged in once we've navigated away from /login and the email field is gone.
+// Logged in once we've left the auth pages (/login, /signup) and no auth form
+// (email field) is still showing — works for both sign-in and sign-up success.
 async function isLoggedIn(page) {
-  for (let i = 0; i < 12; i++) {
-    if (!page.url().includes('/login')) return true;
-    // Surface an inline auth error early instead of waiting the full timeout.
+  const onAuthPage = () => /\/login|\/signup/.test(page.url());
+  for (let i = 0; i < 14; i++) {
+    if (!onAuthPage()) {
+      const emailVisible = await page
+        .locator('#email-field, input[type="email"]')
+        .first()
+        .isVisible({ timeout: 0 })
+        .catch(() => false);
+      if (!emailVisible) return true;
+    }
     const err = await page
-      .locator('text=/incorrect|invalid|doesn\'t match|try again|wrong/i')
+      .locator('text=/incorrect|invalid|doesn\'t match|try again|wrong|already (have|exists|in use)/i')
       .first()
       .isVisible({ timeout: 0 })
       .catch(() => false);
     if (err) return false;
     await page.waitForTimeout(700);
   }
-  return !page.url().includes('/login');
+  return !onAuthPage();
 }
 
 // Best-effort UI sign-out; falls back to clearing the session cookies.
@@ -142,6 +150,91 @@ async function signOut(page, context, steps) {
   return 'cookies';
 }
 
+const SIGNUP_URL = 'https://tubitv.com/signup';
+
+async function loginTubi(page, email, password, steps) {
+  steps.push('Opening Tubi sign-in');
+  await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await dismissBanners(page);
+  steps.push('Entering credentials');
+  await page.fill('input[name="email"], #email-field, input[type="email"]', email);
+  await page.fill('input[name="password"], #password-field, input[type="password"]', password);
+  steps.push('Submitting sign-in');
+  await page.click('button[type="submit"]:has-text("Sign In"), button:has-text("Sign In")');
+  return isLoggedIn(page);
+}
+
+async function emailExistsError(page) {
+  return page
+    .locator('text=/already (have|exists|in use|registered|taken)|account (already )?exists|email.*(taken|in use)/i')
+    .first()
+    .isVisible({ timeout: 1500 })
+    .catch(() => false);
+}
+
+// Best-effort: a 2nd sign-up step commonly asks for date of birth.
+async function fillBirthIfPresent(page, steps) {
+  const dateInput = page.locator('input[type="date"]').first();
+  if (await dateInput.isVisible({ timeout: 1200 }).catch(() => false)) {
+    await dateInput.fill('1990-01-15').catch(() => {});
+    steps.push('Set date of birth');
+    return;
+  }
+  const birthText = page
+    .locator(
+      'input[name*="birth" i], input[id*="birth" i], input[name*="year" i], input[id*="year" i], input[placeholder*="MM/DD" i], input[placeholder*="YYYY" i]',
+    )
+    .first();
+  if (await birthText.isVisible({ timeout: 800 }).catch(() => false)) {
+    const ph = (await birthText.getAttribute('placeholder').catch(() => '')) || '';
+    await birthText.fill(/year|yyyy/i.test(ph) && !/mm/i.test(ph) ? '1990' : '01/15/1990').catch(() => {});
+    steps.push('Set date of birth');
+    return;
+  }
+  const selects = page.locator('select');
+  const n = await selects.count().catch(() => 0);
+  for (let i = 0; i < n; i++) {
+    const opts = await selects.nth(i).locator('option').count().catch(() => 0);
+    if (opts > 1) await selects.nth(i).selectOption({ index: opts > 30 ? 25 : 1 }).catch(() => {});
+  }
+  if (n > 0) steps.push('Filled profile selects');
+}
+
+// Create a brand-new Tubi account. Returns { ok, reason }.
+async function registerTubi(page, { firstName, email, password }, steps) {
+  steps.push('Opening Tubi sign-up');
+  await page.goto(SIGNUP_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await dismissBanners(page);
+
+  steps.push('Filling new-account details');
+  await page.fill('input[name="firstName"], #firstName-field', firstName).catch(() => {});
+  await page.fill('input[name="email"], #email-field, input[type="email"]', email);
+  await page.fill('input[name="password"], #password-field, input[type="password"]', password);
+
+  steps.push('Submitting sign-up');
+  await page
+    .click('button[type="submit"]:has-text("Next"), button:has-text("Next"), button[type="submit"]')
+    .catch(() => {});
+  await page.waitForTimeout(2500);
+
+  if (await emailExistsError(page)) return { ok: false, reason: 'exists' };
+
+  // Optional 2nd step (date of birth, etc.) then a final submit.
+  await fillBirthIfPresent(page, steps);
+  const finalBtn = page
+    .locator(
+      'button:has-text("Sign Up"), button:has-text("Create"), button:has-text("Continue"), button:has-text("Done"), button:has-text("Next"), button[type="submit"]',
+    )
+    .first();
+  if (await finalBtn.isVisible({ timeout: 1500 }).catch(() => false)) {
+    steps.push('Completing sign-up');
+    await finalBtn.click().catch(() => {});
+  }
+
+  const loggedIn = await isLoggedIn(page);
+  return { ok: loggedIn, reason: loggedIn ? 'created' : 'unknown' };
+}
+
 /**
  * @param {{action:'subscribe'|'unsubscribe', email:string, password:string}} opts
  */
@@ -174,23 +267,63 @@ async function runTubiAction({ action, email, password }) {
       }));
     const page = context.pages()[0] || (await context.newPage());
 
-    steps.push('Opening Tubi sign-in');
-    await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await dismissBanners(page);
+    const firstName =
+      (email.split('@')[0] || 'Curate').replace(/[^a-zA-Z]/g, '').slice(0, 20) || 'Curate';
 
-    steps.push('Entering credentials');
-    await page.fill('input[name="email"], #email-field, input[type="email"]', email);
-    await page.fill('input[name="password"], #password-field, input[type="password"]', password);
+    // ── Subscribe = create a new Tubi account (fall back to sign-in if it
+    //    already exists), so it works whether or not the user has an account.
+    if (action === 'subscribe') {
+      const reg = await registerTubi(page, { firstName, email, password }, steps);
+      if (reg.ok) {
+        const screenshot = await snap(page, 'tubi-subscribe');
+        return {
+          ok: true,
+          action: 'subscribe',
+          message: 'Subscribed: created a new Tubi account',
+          steps,
+          screenshot,
+        };
+      }
+      if (reg.reason === 'exists') {
+        steps.push('Email already registered — signing in instead');
+        const loggedIn = await loginTubi(page, email, password, steps);
+        const screenshot = await snap(page, loggedIn ? 'tubi-subscribe' : 'tubi-subscribe-failed');
+        return loggedIn
+          ? {
+              ok: true,
+              action: 'subscribe',
+              message: 'Already had a Tubi account — signed in',
+              steps,
+              screenshot,
+            }
+          : {
+              ok: false,
+              action: 'subscribe',
+              error: 'Account already exists but sign-in failed — check the password.',
+              steps,
+              screenshot,
+              url: page.url(),
+            };
+      }
+      const screenshot = await snap(page, 'tubi-subscribe-failed');
+      return {
+        ok: false,
+        action: 'subscribe',
+        error:
+          'Sign-up did not complete — likely an extra step (e.g. date of birth) or a CAPTCHA. See screenshot.',
+        steps,
+        screenshot,
+        url: page.url(),
+      };
+    }
 
-    steps.push('Submitting sign-in');
-    await page.click('button[type="submit"]:has-text("Sign In"), button:has-text("Sign In")');
-
-    const loggedIn = await isLoggedIn(page);
+    // ── Unsubscribe = sign in, then sign out (non-destructive "cancel").
+    const loggedIn = await loginTubi(page, email, password, steps);
     if (!loggedIn) {
       const screenshot = await snap(page, 'tubi-login-failed');
       return {
         ok: false,
-        action,
+        action: 'unsubscribe',
         error:
           'Sign-in did not complete. Likely wrong credentials, a CAPTCHA, or a device-verification step.',
         steps,
@@ -199,24 +332,12 @@ async function runTubiAction({ action, email, password }) {
       };
     }
     steps.push('Sign-in confirmed');
-
-    if (action === 'unsubscribe') {
-      const method = await signOut(page, context, steps);
-      const screenshot = await snap(page, 'tubi-unsubscribe');
-      return {
-        ok: true,
-        action: 'unsubscribe',
-        message: `Cancelled Tubi (signed out via ${method})`,
-        steps,
-        screenshot,
-      };
-    }
-
-    const screenshot = await snap(page, 'tubi-subscribe');
+    const method = await signOut(page, context, steps);
+    const screenshot = await snap(page, 'tubi-unsubscribe');
     return {
       ok: true,
-      action: 'subscribe',
-      message: 'Subscribed: signed into Tubi successfully',
+      action: 'unsubscribe',
+      message: `Cancelled Tubi (signed out via ${method})`,
       steps,
       screenshot,
     };
