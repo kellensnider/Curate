@@ -46,7 +46,7 @@ export default function HomePage() {
             src="/curate-logo.png"
             alt=""
             aria-hidden="true"
-            className="h-8 w-8 object-contain"
+            className="h-12 w-12 object-contain"
           />
           curate
         </Link>
