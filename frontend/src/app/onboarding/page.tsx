@@ -10,6 +10,7 @@ import { useSubscriptionStore } from '../../store/useSubscriptionStore';
 import { useBillingStore, type BillingCycle } from '../../store/useBillingStore';
 import { useOnboardingStore } from '../../store/useOnboardingStore';
 import InfiniteMembershipControl from '../../components/subscriptions/InfiniteMembershipControl';
+import { calculateSubscriptionCost, getEffectiveMonthlyCost } from '../../lib/subscriptionCost';
 
 const STEPS = ['Preferences', 'Your subscriptions', 'How long they last'];
 
@@ -43,14 +44,10 @@ export default function OnboardingPage() {
   }, []);
 
   const activeSubs = subscriptions.filter((s) => s.status === 'active');
-  const monthlyTotal = activeSubs.reduce((sum, s) => sum + effectiveCost(s), 0);
+  const monthlyTotal = calculateSubscriptionCost(subscriptions);
 
   function priceOf(id: string) {
     return prices[id]?.monthly ?? SERVICES.find((s) => s.id === id)?.monthlyPrice ?? 0;
-  }
-
-  function effectiveCost(sub: { monthlyCost: number; effectiveMonthlyCost?: number; infiniteMembership?: boolean }) {
-    return sub.infiniteMembership ? 0 : sub.effectiveMonthlyCost ?? sub.monthlyCost;
   }
 
   async function toggle(id: string, isActive: boolean) {
@@ -257,7 +254,7 @@ export default function OnboardingPage() {
                     const sub = subscriptions.find((s) => s.service === svc.id);
                     const isActive = sub?.status === 'active';
                     const isInfinite = Boolean(sub?.infiniteMembership);
-                    const displayCost = sub ? effectiveCost(sub) : priceOf(svc.id);
+                    const displayCost = sub ? getEffectiveMonthlyCost(sub) : priceOf(svc.id);
                     return (
                       <div
                         key={svc.id}
@@ -357,7 +354,7 @@ export default function OnboardingPage() {
                                   setEntry(
                                     sub.service,
                                     e.target.value,
-                                    effectiveCost(sub),
+                                    getEffectiveMonthlyCost(sub),
                                     entry?.cycle ?? 'monthly',
                                   )
                                 }
@@ -369,7 +366,7 @@ export default function OnboardingPage() {
                                   setEntry(
                                     sub.service,
                                     entry?.renewalDate ?? '',
-                                    effectiveCost(sub),
+                                    getEffectiveMonthlyCost(sub),
                                     e.target.value as BillingCycle,
                                   )
                                 }

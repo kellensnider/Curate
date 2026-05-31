@@ -24,6 +24,7 @@ import MonthByMonthPlan from '../../components/subscriptions/MonthByMonthPlan';
 import PipelineProgress, { type PipelineStep } from '../../components/pipeline/PipelineProgress';
 import { runAutomation, API_BASE, type AutomationResult } from '../../lib/api';
 import Navbar from '../../components/navigation/Navbar';
+import { calculateSubscriptionCost } from '../../lib/subscriptionCost';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -89,14 +90,23 @@ export default function DashboardPage() {
         .map((s) => s.service),
     [subscriptions],
   );
-  const currentMonthly = activeSubs.reduce(
-    (sum, s) => sum + (s.infiniteMembership ? 0 : s.effectiveMonthlyCost ?? s.monthlyCost),
-    0,
-  );
+  const currentMonthly = calculateSubscriptionCost(subscriptions);
 
   // The editable selection (defaults to the recommended plan after an audit).
   const current = selectedPlan ?? optimizedPlan;
   const selectedOptionIds = current?.purchases.map((p) => p.id) ?? [];
+  const recommendationBaseline = useMemo(
+    () => ({
+      baselineMonthlyCost: current?.baselineMonthlyCost ?? optimizedPlan?.baselineMonthlyCost,
+      baselineSubscriptions: current?.baselineSubscriptions ?? optimizedPlan?.baselineSubscriptions,
+    }),
+    [
+      current?.baselineMonthlyCost,
+      current?.baselineSubscriptions,
+      optimizedPlan?.baselineMonthlyCost,
+      optimizedPlan?.baselineSubscriptions,
+    ],
+  );
 
   // The scheduled next-month plan (persisted), if any.
   const scheduledPlan: OptimizationResult | null = useMemo(
@@ -104,9 +114,10 @@ export default function DashboardPage() {
       scheduledIds
         ? planFromOptionIds(scheduledIds, watchlistShows.map((s) => s.id), watchlistShows, {
             infiniteServiceIds,
+            ...recommendationBaseline,
           })
         : null,
-    [scheduledIds, watchlistShows, infiniteServiceIds],
+    [scheduledIds, watchlistShows, infiniteServiceIds, recommendationBaseline],
   );
 
   // What the timeline treats as "next month": the schedule wins; otherwise the
@@ -151,6 +162,7 @@ export default function DashboardPage() {
     selectPlan(
       planFromOptionIds(next, watchlistShows.map((s) => s.id), watchlistShows, {
         infiniteServiceIds,
+        ...recommendationBaseline,
       }),
     );
   }

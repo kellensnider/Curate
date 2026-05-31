@@ -4,7 +4,6 @@ import {
   optimizeSubscriptions,
   planMultiMonth,
   type OptimizationResult,
-  SERVICES,
 } from '../lib/mockData';
 import type { BackendSubscription, ServicePrice } from '../lib/api';
 import {
@@ -14,6 +13,10 @@ import {
   cancelService as apiCancel,
   applyPlan as apiApplyPlan,
 } from '../lib/api';
+import {
+  calculateBaselineCost,
+  snapshotBaselineSubscriptions,
+} from '../lib/subscriptionCost';
 import { usePreferencesStore } from './usePreferencesStore';
 import { useWatchedStore } from './useWatchedStore';
 
@@ -107,6 +110,8 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       .subscriptions
       .filter((sub) => sub.status === 'active' && sub.infiniteMembership)
       .map((sub) => sub.service);
+    const baselineSubscriptions = snapshotBaselineSubscriptions(get().subscriptions);
+    const baselineMonthlyCost = calculateBaselineCost(baselineSubscriptions);
 
     // Plan several months ahead, completing `showsPerMonth` titles each month.
     const watchPlan = planMultiMonth(ids, shows, {
@@ -115,6 +120,8 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
       showsPerMonth,
       watchedIds,
       infiniteServiceIds,
+      baselineSubscriptions,
+      baselineMonthlyCost,
     });
 
     // Month 0's plan is the actionable "next month" recommendation; fall back to
@@ -125,6 +132,8 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
         maxPurchases: maxSubscriptions,
         maxMonthlyCost,
         infiniteServiceIds,
+        baselineSubscriptions,
+        baselineMonthlyCost,
       });
 
     // Default the user's selection to the optimal plan; they can edit from there.

@@ -32,7 +32,7 @@ export default function OptimizationSummary({ result, showCount }: OptimizationS
           </p>
           {result.monthlySavings > 0 && (
             <p className="text-zinc-400 text-sm mt-0.5">
-              Saving ${result.monthlySavings.toFixed(2)}/month vs. subscribing to everything
+              Saving ${result.monthlySavings.toFixed(2)}/month vs. your pre-optimization baseline
             </p>
           )}
         </div>

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useBillingStore, type BillingCycle } from '../../store/useBillingStore';
 import { SERVICES } from '../../lib/mockData';
 import type { BackendSubscription } from '../../lib/api';
+import { getEffectiveMonthlyCost } from '../../lib/subscriptionCost';
 
 interface BillingCaptureProps {
   activeSubscriptions: BackendSubscription[];
@@ -23,12 +24,8 @@ export default function BillingCapture({ activeSubscriptions }: BillingCapturePr
 
   function saveEntry(sub: BackendSubscription) {
     if (!dateInput) return;
-    setEntry(sub.service, dateInput, effectiveCost(sub), cycleInput);
+    setEntry(sub.service, dateInput, getEffectiveMonthlyCost(sub), cycleInput);
     setEditing(null);
-  }
-
-  function effectiveCost(sub: BackendSubscription) {
-    return sub.infiniteMembership ? 0 : sub.effectiveMonthlyCost ?? sub.monthlyCost;
   }
 
   if (activeSubscriptions.length === 0) {

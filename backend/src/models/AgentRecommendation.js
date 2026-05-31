@@ -15,6 +15,26 @@ const coverageSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const baselineSubscriptionSchema = new mongoose.Schema(
+  {
+    service: String,
+    displayName: String,
+    monthlyCost: {
+      type: Number,
+      default: 0,
+    },
+    effectiveMonthlyCost: {
+      type: Number,
+      default: 0,
+    },
+    infiniteMembership: {
+      type: Boolean,
+      default: false,
+    },
+  },
+  { _id: false }
+);
+
 const agentRecommendationSchema = new mongoose.Schema(
   {
     userId: {
@@ -26,6 +46,11 @@ const agentRecommendationSchema = new mongoose.Schema(
     recommendedServices: [String],
     servicesToCancel: [String],
     servicesToActivate: [String],
+    baselineSubscriptions: {
+      type: [baselineSubscriptionSchema],
+      default: [],
+    },
+    baselineMonthlyCost: Number,
     currentMonthlyCost: Number,
     recommendedMonthlyCost: Number,
     estimatedSavings: Number,
@@ -39,5 +64,15 @@ const agentRecommendationSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+agentRecommendationSchema.pre('validate', function normalizeBaseline(next) {
+  if (typeof this.baselineMonthlyCost !== 'number' && typeof this.currentMonthlyCost === 'number') {
+    this.baselineMonthlyCost = this.currentMonthlyCost;
+  }
+  if (typeof this.currentMonthlyCost !== 'number' && typeof this.baselineMonthlyCost === 'number') {
+    this.currentMonthlyCost = this.baselineMonthlyCost;
+  }
+  next();
+});
 
 module.exports = mongoose.model('AgentRecommendation', agentRecommendationSchema);

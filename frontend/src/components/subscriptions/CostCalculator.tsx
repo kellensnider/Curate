@@ -34,6 +34,7 @@ interface CostCalculatorProps {
 }
 
 export default function CostCalculator({ result }: CostCalculatorProps) {
+  const baselineMonthlyCost = result.baselineMonthlyCost ?? ALL_SERVICES_TOTAL;
   const animatedTotal = useCountUp(result.monthlyTotal);
   const animatedSavings = useCountUp(result.monthlySavings);
 
@@ -51,17 +52,19 @@ export default function CostCalculator({ result }: CostCalculatorProps) {
         <span className="text-zinc-500 text-sm ml-2">/mo</span>
       </div>
       <p className="text-zinc-600 text-sm line-through">
-        ${ALL_SERVICES_TOTAL.toFixed(2)}/mo for all 8 services
+        ${baselineMonthlyCost.toFixed(2)}/mo before optimization
       </p>
 
       {/* Savings callout */}
-      {result.monthlySavings > 0 && (
+      {result.monthlySavings !== 0 && (
         <div className="mt-4 p-4 bg-emerald-950/40 border border-emerald-900/50 rounded-xl">
           <p className="text-emerald-400 font-semibold text-lg">
-            Saving ${animatedSavings.toFixed(2)}/mo
+            {result.monthlySavings > 0 ? 'Saving' : 'Adds'} ${Math.abs(animatedSavings).toFixed(2)}/mo
           </p>
           <p className="text-emerald-700 text-xs mt-0.5">
-            That's ${(result.monthlySavings * 12).toFixed(0)} back per year
+            {result.monthlySavings > 0
+              ? `That's ${(result.monthlySavings * 12).toFixed(0)} back per year`
+              : 'This plan costs more than the baseline.'}
           </p>
         </div>
       )}

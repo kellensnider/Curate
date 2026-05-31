@@ -4,10 +4,11 @@ const { Subscription, SERVICE_PRICES, resolveDemoUserId } = require('../models')
 const { executeTool } = require('../mcp/server');
 const { requireAuth } = require('../middleware/auth');
 const { ensureDefaultSubscriptions } = require('../services/subscriptionService');
+const { calculateSubscriptionCost, getEffectiveMonthlyCost } = require('../utils/subscriptionCost');
 
 function serializeSubscription(subscription) {
   const infiniteMembership = Boolean(subscription.infiniteMembership);
-  const effectiveMonthlyCost = infiniteMembership ? 0 : subscription.monthlyCost;
+  const effectiveMonthlyCost = getEffectiveMonthlyCost(subscription);
 
   return {
     _id: subscription._id,
@@ -36,7 +37,7 @@ async function getSubscriptionsForUser(userId) {
     });
 
   const active = subscriptions.filter(s => s.status === 'active');
-  const totalCost = active.reduce((sum, s) => sum + s.effectiveMonthlyCost, 0);
+  const totalCost = calculateSubscriptionCost(subscriptions);
 
   return {
     subscriptions,

@@ -6,6 +6,7 @@ const {
   resolveDemoUserId,
   serializeShow,
 } = require('../models');
+const { calculateSubscriptionCost, getEffectiveMonthlyCost } = require('../utils/subscriptionCost');
 
 // MCP tool definitions - these are passed to the Claude API as tools.
 const MCP_TOOLS = [
@@ -82,10 +83,6 @@ async function getUserId(inputUserId) {
   return userId;
 }
 
-function effectiveMonthlyCost(subscription) {
-  return subscription.infiniteMembership ? 0 : subscription.monthlyCost;
-}
-
 // Tool execution handlers.
 async function executeTool(toolName, input) {
   switch (toolName) {
@@ -117,8 +114,8 @@ async function executeTool(toolName, input) {
         status: sub.infiniteMembership ? 'active' : sub.status,
         monthly_cost: sub.monthlyCost,
         monthlyCost: sub.monthlyCost,
-        effective_monthly_cost: effectiveMonthlyCost(sub),
-        effectiveMonthlyCost: effectiveMonthlyCost(sub),
+        effective_monthly_cost: getEffectiveMonthlyCost(sub),
+        effectiveMonthlyCost: getEffectiveMonthlyCost(sub),
         infiniteMembership: Boolean(sub.infiniteMembership),
       }));
       const active = all.filter(s => s.status === 'active');
@@ -126,7 +123,7 @@ async function executeTool(toolName, input) {
       return {
         all,
         active,
-        monthly_total: active.reduce((sum, s) => sum + s.effectiveMonthlyCost, 0).toFixed(2),
+        monthly_total: calculateSubscriptionCost(all).toFixed(2),
       };
     }
 

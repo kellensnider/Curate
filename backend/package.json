@@ -19,7 +19,8 @@
     "ingest:catalog": "cd ingest && python justwatch_ingest.py --count 2000 --include-curated --max-attempts 30",
     "import:catalog": "node src/seed/importJustWatchData.js",
     "refresh:catalog": "npm run ingest:catalog && npm run import:catalog",
-    "verify:catalog": "node src/seed/verifyCatalog.js"
+    "verify:catalog": "node src/seed/verifyCatalog.js",
+    "verify:savings": "node src/seed/verifySavingsBaseline.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

@@ -9,6 +9,7 @@ import { useBillingStore, type BillingCycle } from '../../store/useBillingStore'
 import { useAuthStore } from '../../store/useAuthStore';
 import Navbar from '../../components/navigation/Navbar';
 import InfiniteMembershipControl from '../../components/subscriptions/InfiniteMembershipControl';
+import { calculateSubscriptionCost, getEffectiveMonthlyCost } from '../../lib/subscriptionCost';
 
 export default function SubscriptionsPage() {
   const router = useRouter();
@@ -38,14 +39,10 @@ export default function SubscriptionsPage() {
   }, []);
 
   const activeSubs = subscriptions.filter((s) => s.status === 'active');
-  const monthlyTotal = activeSubs.reduce((sum, s) => sum + effectiveCost(s), 0);
+  const monthlyTotal = calculateSubscriptionCost(subscriptions);
 
   function priceOf(id: string) {
     return prices[id]?.monthly ?? SERVICES.find((s) => s.id === id)?.monthlyPrice ?? 0;
-  }
-
-  function effectiveCost(sub: { monthlyCost: number; effectiveMonthlyCost?: number; infiniteMembership?: boolean }) {
-    return sub.infiniteMembership ? 0 : sub.effectiveMonthlyCost ?? sub.monthlyCost;
   }
 
   async function toggle(id: string, isActive: boolean) {
@@ -117,7 +114,7 @@ export default function SubscriptionsPage() {
             const sub = subscriptions.find((s) => s.service === svc.id);
             const isActive = sub?.status === 'active';
             const isInfinite = Boolean(sub?.infiniteMembership);
-            const displayCost = sub ? effectiveCost(sub) : priceOf(svc.id);
+            const displayCost = sub ? getEffectiveMonthlyCost(sub) : priceOf(svc.id);
             const entry = entries[svc.id];
             const duration = describeDuration(svc.id);
 
@@ -183,7 +180,7 @@ export default function SubscriptionsPage() {
                         setEntry(
                           svc.id,
                           e.target.value,
-                          sub ? effectiveCost(sub) : priceOf(svc.id),
+                          sub ? getEffectiveMonthlyCost(sub) : priceOf(svc.id),
                           entry?.cycle ?? 'monthly',
                         )
                       }
@@ -195,7 +192,7 @@ export default function SubscriptionsPage() {
                         setEntry(
                           svc.id,
                           entry?.renewalDate ?? '',
-                          sub ? effectiveCost(sub) : priceOf(svc.id),
+                          sub ? getEffectiveMonthlyCost(sub) : priceOf(svc.id),
                           e.target.value as BillingCycle,
                         )
                       }

@@ -1,4 +1,5 @@
 import catalogData from './catalogData.json';
+import type { BaselineSubscription } from './subscriptionCost';
 
 export interface Show {
   id: string;
@@ -36,6 +37,9 @@ export interface OptimizationResult {
   requiredServices: Service[];
   /** What to actually buy — individual services and/or bundles. */
   purchases: PlanOption[];
+  baselineSubscriptions?: BaselineSubscription[];
+  baselineMonthlyCost?: number;
+  recommendedMonthlyCost?: number;
   monthlyTotal: number;
   monthlySavings: number;
   /** Per-show: which of the plan's services cover it. */
@@ -136,6 +140,18 @@ export interface OptimizeOptions {
   maxMonthlyCost?: number;
   /** Services the user has free ongoing access to. They count for coverage at $0. */
   infiniteServiceIds?: string[];
+  /** Frozen "before optimization" cost. Savings are computed from this, not live subscriptions. */
+  baselineMonthlyCost?: number;
+  baselineSubscriptions?: BaselineSubscription[];
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function calculateSavings(recommendedMonthlyCost: number, options: OptimizeOptions) {
+  const baseline = options.baselineMonthlyCost ?? ALL_SERVICES_TOTAL;
+  return roundMoney(baseline - recommendedMonthlyCost);
 }
 
 // Enumerate every combination of `items` with size 1..max.
@@ -176,8 +192,11 @@ export function optimizeSubscriptions(
     return {
       requiredServices,
       purchases: [],
+      baselineSubscriptions: options.baselineSubscriptions,
+      baselineMonthlyCost: options.baselineMonthlyCost,
+      recommendedMonthlyCost: 0,
       monthlyTotal: 0,
-      monthlySavings: ALL_SERVICES_TOTAL,
+      monthlySavings: calculateSavings(0, options),
       coverageMap: {},
       coverage: {},
     };
@@ -241,12 +260,15 @@ export function optimizeSubscriptions(
     coverageMap[show.id] = show.streamingServices.filter((s) => granted.has(s));
   }
 
-  const monthlyTotal = best.reduce((sum, o) => sum + o.monthlyPrice, 0);
-  const monthlySavings = Math.max(0, ALL_SERVICES_TOTAL - monthlyTotal);
+  const monthlyTotal = roundMoney(best.reduce((sum, o) => sum + o.monthlyPrice, 0));
+  const monthlySavings = calculateSavings(monthlyTotal, options);
 
   return {
     requiredServices,
     purchases: best,
+    baselineSubscriptions: options.baselineSubscriptions,
+    baselineMonthlyCost: options.baselineMonthlyCost,
+    recommendedMonthlyCost: monthlyTotal,
     monthlyTotal,
     monthlySavings,
     coverageMap,
@@ -263,7 +285,10 @@ export function planFromOptionIds(
   optionIds: string[],
   selectedShowIds: string[],
   pool: Show[] = SHOWS,
-  options: Pick<OptimizeOptions, 'infiniteServiceIds'> = {}
+  options: Pick<
+    OptimizeOptions,
+    'infiniteServiceIds' | 'baselineMonthlyCost' | 'baselineSubscriptions'
+  > = {}
 ): OptimizationResult {
   const infiniteServices = new Set(options.infiniteServiceIds ?? []);
   const purchases = PLAN_OPTIONS.filter(
@@ -282,12 +307,15 @@ export function planFromOptionIds(
     coverageMap[show.id] = show.streamingServices.filter((s) => granted.has(s));
   }
 
-  const monthlyTotal = purchases.reduce((sum, o) => sum + o.monthlyPrice, 0);
-  const monthlySavings = Math.max(0, ALL_SERVICES_TOTAL - monthlyTotal);
+  const monthlyTotal = roundMoney(purchases.reduce((sum, o) => sum + o.monthlyPrice, 0));
+  const monthlySavings = calculateSavings(monthlyTotal, options);
 
   return {
     requiredServices,
     purchases,
+    baselineSubscriptions: options.baselineSubscriptions,
+    baselineMonthlyCost: options.baselineMonthlyCost,
+    recommendedMonthlyCost: monthlyTotal,
     monthlyTotal,
     monthlySavings,
     coverageMap,
@@ -347,6 +375,9 @@ export function planMultiMonth(
     maxMonthlyCost = Infinity,
     horizon = 6,
     watchedIds = [],
+    infiniteServiceIds,
+    baselineMonthlyCost,
+    baselineSubscriptions,
   } = options;
 
   const byId = new Map(pool.map((s) => [s.id, s]));
@@ -364,7 +395,13 @@ export function planMultiMonth(
     const plan = optimizeSubscriptions(
       remaining.map((s) => s.id),
       remaining,
-      { maxPurchases, maxMonthlyCost },
+      {
+        maxPurchases,
+        maxMonthlyCost,
+        infiniteServiceIds,
+        baselineMonthlyCost,
+        baselineSubscriptions,
+      },
     );
     const granted = new Set(plan.requiredServices.map((s) => s.id));
     const coveredThisMonth = remaining.filter((s) =>
