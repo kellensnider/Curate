@@ -166,8 +166,14 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
   // Remote browser (e.g. Browserbase) when BROWSER_WS_ENDPOINT is set — so a
   // host that can't run Chromium (Render free) still drives a real browser.
   // Otherwise launch locally (headed for the live demo).
-  const ws = process.env.BROWSER_WS_ENDPOINT;
+  let ws = process.env.BROWSER_WS_ENDPOINT;
   const remote = Boolean(ws);
+  // Remote sessions (e.g. Browserless) default to a short timeout that can expire
+  // mid-signup. Extend it so the agent has time to finish all steps.
+  if (ws && /browserless/i.test(ws) && !/[?&]timeout=/.test(ws)) {
+    const sep = ws.includes('?') ? '&' : '?';
+    ws += `${sep}timeout=${process.env.BROWSER_SESSION_TIMEOUT_MS || 240000}`;
+  }
   const headless = process.env.AUTOMATION_HEADLESS !== 'false';
   const slowMo = Number(process.env.BROWSER_SLOWMO) || 0;
   // Match tubi.js: default to Playwright-protocol connect (Browserless), opt into
@@ -271,8 +277,12 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
 
     finishRun(run, { result: { ok: true, message: `Reached step cap (${maxSteps}).`, steps_taken: maxSteps } });
   } catch (err) {
-    pushStep(run, `Error: ${err.message}`);
-    finishRun(run, { error: err });
+    const closed = /closed|disconnected|Target page|Target closed/i.test(err.message || '');
+    const msg = closed
+      ? 'Remote browser session ended mid-run (likely a session timeout). Raise BROWSER_SESSION_TIMEOUT_MS or add "&timeout=300000" to BROWSER_WS_ENDPOINT.'
+      : err.message;
+    pushStep(run, `Error: ${msg}`);
+    finishRun(run, { error: new Error(msg) });
   } finally {
     await browser.close().catch(() => {});
   }
