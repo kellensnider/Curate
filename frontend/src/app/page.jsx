@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { SHOWS, ALL_SERVICES_TOTAL } from '../lib/mockData';
 import { useAuthStore } from '../store/useAuthStore';
+import { useOnboardingStore } from '../store/useOnboardingStore';
 
 const STATS = [
   { value: '$61', label: 'Average household streaming bill / month' },
@@ -16,11 +17,15 @@ const STATS = [
 
 export default function HomePage() {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, userEmail } = useAuthStore();
+  const completedEmails = useOnboardingStore((s) => s.completedEmails);
 
   useEffect(() => {
-    if (isAuthenticated) router.replace('/dashboard');
-  }, [isAuthenticated, router]);
+    if (!isAuthenticated) return;
+    // New / not-yet-onboarded accounts go through first-run setup.
+    const onboarded = userEmail && completedEmails.includes(userEmail);
+    router.replace(onboarded ? '/dashboard' : '/onboarding');
+  }, [isAuthenticated, userEmail, completedEmails, router]);
 
   const posters = useMemo(() => {
     const withPosters = SHOWS.filter((s) => s.posterUrl);
