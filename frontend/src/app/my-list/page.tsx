@@ -4,16 +4,15 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { SERVICES, SHOWS, type Show } from '../../lib/mockData';
+import { SERVICES, type Show } from '../../lib/mockData';
 import { useShowStore } from '../../store/useShowStore';
 import { useWatchedStore } from '../../store/useWatchedStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import Navbar from '../../components/navigation/Navbar';
 
-type Filter = 'all' | 'to-watch' | 'watched';
+type Filter = 'to-watch' | 'watched';
 
 const FILTERS: { key: Filter; label: string }[] = [
-  { key: 'all', label: 'All' },
   { key: 'to-watch', label: 'To watch' },
   { key: 'watched', label: 'Watched' },
 ];
@@ -23,11 +22,11 @@ export default function MyListPage() {
   const { isAuthenticated } = useAuthStore();
   const { watchlistLoading, fetchWatchlist, watchlistAsShows, removeShowFromWatchlist } =
     useShowStore();
-  const { watchedIds, markWatched } = useWatchedStore();
+  const { watchedIds, watchedShows, markWatched, unmarkWatched } = useWatchedStore();
 
   const [active, setActive] = useState<Show | null>(null);
   const [busy, setBusy] = useState(false);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [filter, setFilter] = useState<Filter>('to-watch');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -39,16 +38,27 @@ export default function MyListPage() {
   }, []);
 
   const shows = watchlistAsShows();
-  const watchedShows = SHOWS.filter((s) => watchedIds.includes(s.id));
   const servicesNeeded = new Set(shows.flatMap((s) => s.streamingServices)).size;
 
   const displayShows = filter === 'watched' ? watchedShows : shows;
 
   async function handleMarkWatched(show: Show) {
     setBusy(true);
-    markWatched(show.id);
+    markWatched(show);
     await removeShowFromWatchlist(show.id);
     setBusy(false);
+    setActive(null);
+  }
+
+  async function handleRemoveFromWatchlist(show: Show) {
+    setBusy(true);
+    await removeShowFromWatchlist(show.id);
+    setBusy(false);
+    setActive(null);
+  }
+
+  function handleRemoveWatched(show: Show) {
+    unmarkWatched(show.id);
     setActive(null);
   }
 
@@ -70,7 +80,7 @@ export default function MyListPage() {
         {/* Stat cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
           <StatCard value={shows.length} label="Shows in list" />
-          <StatCard value={watchedIds.length} label="Watched" />
+          <StatCard value={watchedShows.length} label="Watched" />
           <StatCard value={servicesNeeded} label="Services needed" />
         </div>
 
@@ -218,14 +228,14 @@ export default function MyListPage() {
               <PosterCard
                 key={show.id}
                 show={show}
-                onClick={filter !== 'watched' ? () => setActive(show) : undefined}
+                onClick={() => setActive(show)}
               />
             ))}
           </div>
         )}
       </div>
 
-      {/* Mark-as-watched modal */}
+      {/* Action modal */}
       <AnimatePresence>
         {active && (
           <>
@@ -273,27 +283,70 @@ export default function MyListPage() {
                 </div>
               </div>
 
-              <button
-                onClick={() => handleMarkWatched(active)}
-                disabled={busy}
-                className="group w-full mt-6 flex items-center gap-3 p-4 bg-zinc-800 hover:bg-emerald-950/50 border border-zinc-700 hover:border-emerald-800 rounded-2xl transition-colors disabled:opacity-50"
-              >
-                <span className="w-7 h-7 rounded-lg border-2 border-zinc-600 group-hover:border-emerald-500 flex items-center justify-center transition-colors">
-                  <svg width="14" height="11" viewBox="0 0 14 11" fill="none">
-                    <path
-                      d="M1 5.5L5 9.5L13 1.5"
-                      stroke="#4ade80"
-                      strokeWidth="2.2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    />
-                  </svg>
-                </span>
-                <span className="text-sm font-semibold text-white text-left">
-                  {busy ? 'Saving…' : 'Mark as watched & remove from list'}
-                </span>
-              </button>
+              {filter === 'to-watch' ? (
+                <>
+                  <button
+                    onClick={() => handleMarkWatched(active)}
+                    disabled={busy}
+                    className="group w-full mt-6 flex items-center gap-3 p-4 bg-zinc-800 hover:bg-emerald-950/50 border border-zinc-700 hover:border-emerald-800 rounded-2xl transition-colors disabled:opacity-50"
+                  >
+                    <span className="w-7 h-7 rounded-lg border-2 border-zinc-600 group-hover:border-emerald-500 flex items-center justify-center transition-colors shrink-0">
+                      <svg width="14" height="11" viewBox="0 0 14 11" fill="none">
+                        <path
+                          d="M1 5.5L5 9.5L13 1.5"
+                          stroke="#4ade80"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        />
+                      </svg>
+                    </span>
+                    <span className="text-sm font-semibold text-white text-left">
+                      {busy ? 'Saving…' : 'Mark as watched'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => handleRemoveFromWatchlist(active)}
+                    disabled={busy}
+                    className="group w-full mt-2 flex items-center gap-3 p-4 bg-zinc-800 hover:bg-red-950/40 border border-zinc-700 hover:border-red-900 rounded-2xl transition-colors disabled:opacity-50"
+                  >
+                    <span className="w-7 h-7 rounded-lg border-2 border-zinc-600 group-hover:border-red-600 flex items-center justify-center transition-colors shrink-0">
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path
+                          d="M2 2l8 8M10 2l-8 8"
+                          stroke="#f87171"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        />
+                      </svg>
+                    </span>
+                    <span className="text-sm font-semibold text-white text-left">
+                      {busy ? 'Removing…' : 'Remove from list'}
+                    </span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => handleRemoveWatched(active)}
+                  className="group w-full mt-6 flex items-center gap-3 p-4 bg-zinc-800 hover:bg-red-950/40 border border-zinc-700 hover:border-red-900 rounded-2xl transition-colors"
+                >
+                  <span className="w-7 h-7 rounded-lg border-2 border-zinc-600 group-hover:border-red-600 flex items-center justify-center transition-colors shrink-0">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                      <path
+                        d="M2 2l8 8M10 2l-8 8"
+                        stroke="#f87171"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                      />
+                    </svg>
+                  </span>
+                  <span className="text-sm font-semibold text-white text-left">Remove from list</span>
+                </button>
+              )}
 
               <button
                 onClick={() => setActive(null)}
@@ -341,7 +394,7 @@ function PosterCard({ show, onClick }: { show: Show; onClick?: () => void }) {
         aspectRatio: '2/3',
         border: '0.5px solid rgba(255,255,255,0.07)',
         background: '#1a1a1a',
-        cursor: onClick ? 'pointer' : 'default',
+        cursor: 'pointer',
         display: 'block',
         width: '100%',
         padding: 0,

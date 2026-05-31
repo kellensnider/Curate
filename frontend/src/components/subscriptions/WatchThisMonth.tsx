@@ -80,7 +80,7 @@ export default function WatchThisMonth({ month }: WatchThisMonthProps) {
                 )}
                 <button
                   onClick={() =>
-                    watched ? unmarkWatched(show.id) : markWatched(show.id)
+                    watched ? unmarkWatched(show.id) : markWatched(show)
                   }
                   className={`mt-auto text-xs font-semibold py-2 rounded-lg transition-colors ${
                     watched
