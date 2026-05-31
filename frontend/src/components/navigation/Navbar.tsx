@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { useAuthStore } from '../../store/useAuthStore';
 
@@ -12,22 +12,29 @@ const NAV_LINKS = [
   { href: '/browse', label: 'Browse' },
   { href: DASHBOARD_ROUTE, label: 'Dashboard' },
   { href: '/my-list', label: 'My List' },
-  { href: '/profile', label: 'Profile' },
 ];
+
+function navLinkStyle(active: boolean) {
+  return {
+    fontSize: 14,
+    color: active ? 'white' : 'rgba(255,255,255,0.4)',
+    textDecoration: 'none',
+    padding: '4px 12px',
+    borderRadius: 20,
+    background: active ? 'rgba(255,255,255,0.1)' : 'transparent',
+    transition: 'background 0.15s, color 0.15s',
+  };
+}
 
 export default function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const { isAuthenticated, userName, signOut, hydrateUser } = useAuthStore();
+  const { isAuthenticated, userName, hydrateUser } = useAuthStore();
 
   useEffect(() => {
     hydrateUser();
   }, [hydrateUser]);
 
-  async function handleSignOut() {
-    await signOut();
-    router.push(HOME_ROUTE);
-  }
+  const profileActive = pathname === '/profile';
 
   return (
     <nav
@@ -35,13 +42,13 @@ export default function Navbar() {
         position: 'sticky',
         top: 0,
         zIndex: 40,
-        height: 48,
+        height: 60,
         background: '#09090b',
         borderBottom: '0.5px solid rgba(255,255,255,0.07)',
         display: 'flex',
         alignItems: 'center',
-        paddingLeft: 24,
-        paddingRight: 24,
+        paddingLeft: 28,
+        paddingRight: 28,
       }}
     >
       <Link
@@ -49,7 +56,7 @@ export default function Navbar() {
         style={{
           color: 'white',
           fontWeight: 700,
-          fontSize: 14,
+          fontSize: 17,
           textDecoration: 'none',
           flexShrink: 0,
           letterSpacing: '-0.01em',
@@ -59,65 +66,33 @@ export default function Navbar() {
       </Link>
 
       {isAuthenticated && (
-        <div className="hidden md:flex" style={{ alignItems: 'center', gap: 2, flex: 1, marginLeft: 16 }}>
-          {NAV_LINKS.map((link) => {
-            const active = pathname === link.href;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                style={{
-                  fontSize: 12,
-                  color: active ? 'white' : 'rgba(255,255,255,0.4)',
-                  textDecoration: 'none',
-                  padding: '3px 10px',
-                  borderRadius: 20,
-                  background: active ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  transition: 'background 0.15s, color 0.15s',
-                }}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
+        <div className="hidden md:flex" style={{ alignItems: 'center', gap: 2, flex: 1, marginLeft: 20 }}>
+          {NAV_LINKS.map((link) => (
+            <Link key={link.href} href={link.href} style={navLinkStyle(pathname === link.href)}>
+              {link.label}
+            </Link>
+          ))}
         </div>
       )}
 
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
         {isAuthenticated ? (
-          <>
-            <span
-              className="hidden sm:block"
-              style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}
-            >
-              {userName}
-            </span>
-            <button
-              onClick={handleSignOut}
-              style={{
-                fontSize: 12,
-                color: 'rgba(255,255,255,0.25)',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                transition: 'color 0.15s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.6)')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = 'rgba(255,255,255,0.25)')}
-            >
-              Sign out
-            </button>
-          </>
+          <Link
+            href="/profile"
+            className="hidden sm:block"
+            style={navLinkStyle(profileActive)}
+          >
+            {userName}
+          </Link>
         ) : (
           <>
             <Link
               href="/auth?mode=signin"
               style={{
-                fontSize: 12,
+                fontSize: 14,
                 color: 'rgba(255,255,255,0.5)',
                 textDecoration: 'none',
-                padding: '3px 10px',
+                padding: '4px 12px',
                 borderRadius: 20,
               }}
             >
@@ -126,12 +101,12 @@ export default function Navbar() {
             <Link
               href="/auth?mode=signup"
               style={{
-                fontSize: 12,
+                fontSize: 14,
                 background: 'white',
                 color: 'black',
                 fontWeight: 700,
                 textDecoration: 'none',
-                padding: '4px 12px',
+                padding: '5px 14px',
                 borderRadius: 20,
               }}
             >

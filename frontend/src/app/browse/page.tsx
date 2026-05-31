@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { SERVICES, ALL_GENRES, type Show } from '../../lib/mockData';
+import { SERVICES, type Show } from '../../lib/mockData';
+
+const BROWSE_GENRES = ['All', 'Action', 'Comedy', 'Drama', 'Sci-Fi', 'Thriller'];
 import { useShowStore } from '../../store/useShowStore';
 import ShowGrid from '../../components/shows/ShowGrid';
 import ShowModal from '../../components/shows/ShowModal';
@@ -33,7 +35,7 @@ export default function BrowsePage() {
   // Fire API search when debounced query or filters change
   useEffect(() => {
     if (debouncedQuery || activeGenre !== 'All' || activeService) {
-      searchShows(debouncedQuery, activeGenre !== 'All' ? activeGenre : undefined, activeService ?? undefined);
+      searchShows(debouncedQuery, activeGenre !== 'All' ? activeGenre.toLowerCase() : undefined, activeService ?? undefined);
     } else {
       fetchPopular();
     }
@@ -69,7 +71,7 @@ export default function BrowsePage() {
         {/* Sticky filters */}
         <div
           className="sticky z-30 pb-4"
-          style={{ top: 48, background: '#09090b', marginLeft: -24, marginRight: -24, paddingLeft: 24, paddingRight: 24 }}
+          style={{ top: 60, background: '#09090b', marginLeft: -24, marginRight: -24, paddingLeft: 24, paddingRight: 24 }}
         >
           {/* Search */}
           <div className="relative mb-3">
@@ -86,7 +88,7 @@ export default function BrowsePage() {
             />
           </div>
 
-          <GenreFilter genres={ALL_GENRES} active={activeGenre} onChange={setActiveGenre} />
+          <GenreFilter genres={BROWSE_GENRES} active={activeGenre} onChange={setActiveGenre} />
 
           {/* Service filters */}
           <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
