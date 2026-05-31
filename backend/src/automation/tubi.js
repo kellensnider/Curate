@@ -164,6 +164,27 @@ async function loginTubi(page, email, password, steps) {
   return isLoggedIn(page);
 }
 
+// Turn Tubi's auth errors into an actionable message.
+async function authFailureHint(page) {
+  const passwordless = await page
+    .locator('text=/without a password/i')
+    .first()
+    .isVisible({ timeout: 600 })
+    .catch(() => false);
+  if (passwordless) {
+    return 'Tubi rejected the password and offered passwordless sign-in — this account is almost certainly a Google ("Continue with Google") / no-password account. Email+password automation can\'t sign into it. Test with a fresh email so Subscribe creates a real password account.';
+  }
+  const invalid = await page
+    .locator('text=/invalid email|incorrect|wrong password/i')
+    .first()
+    .isVisible({ timeout: 600 })
+    .catch(() => false);
+  if (invalid) {
+    return 'Tubi rejected the email/password — the password is wrong, or the account has no password (Google sign-in). Use a fresh email, or reset the password on Tubi first.';
+  }
+  return null;
+}
+
 async function emailExistsError(page) {
   return page
     .locator('text=/already (have|exists|in use|registered|taken)|account (already )?exists|email.*(taken|in use)/i')
@@ -313,10 +334,12 @@ async function runTubiAction({ action, email, password }) {
           screenshot,
         };
       }
+      const hint = await authFailureHint(page);
       return {
         ok: false,
         action: 'subscribe',
         error:
+          hint ||
           'Could not sign in or create a Tubi account — likely an extra sign-up step (e.g. date of birth) or a CAPTCHA. See screenshot.',
         steps,
         screenshot,
@@ -328,10 +351,12 @@ async function runTubiAction({ action, email, password }) {
     const loggedIn = await loginTubi(page, email, password, steps);
     if (!loggedIn) {
       const screenshot = await snap(page, 'tubi-login-failed');
+      const hint = await authFailureHint(page);
       return {
         ok: false,
         action: 'unsubscribe',
         error:
+          hint ||
           'Sign-in did not complete. Likely wrong credentials, a CAPTCHA, or a device-verification step.',
         steps,
         screenshot,
