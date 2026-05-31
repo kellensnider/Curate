@@ -288,6 +288,11 @@ export default function DashboardPage() {
           </p>
         </motion.div>
 
+        {/* What to watch this month — pinned to the top for quick check-ins */}
+        {auditState === 'done' && watchPlan && watchPlan.months.length > 0 && (
+          <WatchThisMonth month={watchPlan.months[0]} />
+        )}
+
         {/* This-month summary */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           <SummaryStat label="Active services" value={activeSubs.length.toString()} />
@@ -491,10 +496,7 @@ export default function DashboardPage() {
 
         {/* ─── Multi-month plan ──────────────────────────────────────────── */}
         {auditState === 'done' && watchPlan && watchPlan.months.length > 0 && (
-          <>
-            <WatchThisMonth month={watchPlan.months[0]} />
-            <MonthByMonthPlan plan={watchPlan} />
-          </>
+          <MonthByMonthPlan plan={watchPlan} />
         )}
 
         {/* Tubi automation result (when a plan adds/removes Tubi) */}

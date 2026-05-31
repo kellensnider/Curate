@@ -10,9 +10,11 @@ interface MonthByMonthPlanProps {
 
 function monthLabel(monthIndex: number): string {
   if (monthIndex === 0) return 'This month';
-  const d = new Date();
-  d.setMonth(d.getMonth() + monthIndex);
-  return d.toLocaleString('default', { month: 'long', year: '2-digit' });
+  // Anchor to the 1st so adding months never overflows a short month
+  // (e.g. May 31 + 1mo must be June, not July 1).
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() + monthIndex, 1);
+  return d.toLocaleString('default', { month: 'long', year: 'numeric' });
 }
 
 /**
