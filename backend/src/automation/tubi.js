@@ -20,15 +20,42 @@ const SCREENSHOT_DIR = path.join(__dirname, '../../screenshots');
 const LOGIN_URL = 'https://tubitv.com/login';
 const HOME_URL = 'https://tubitv.com/';
 
-// Lazily load Playwright so the rest of the backend (and the deploy) doesn't
-// depend on a Chromium install. Run the worker where a browser is available:
-//   npm i playwright && npx playwright install chromium
+// Lazily load Playwright. `playwright-core` (a deploy dependency) is enough to
+// CONNECT to a remote browser; local LAUNCH additionally needs `playwright` +
+// `npx playwright install chromium`.
 function loadChromium() {
-  try {
-    return require('playwright').chromium;
-  } catch {
-    return null;
+  for (const pkg of ['playwright-core', 'playwright']) {
+    try {
+      return require(pkg).chromium;
+    } catch {
+      /* try next */
+    }
   }
+  return null;
+}
+
+// Get a browser. If BROWSER_WS_ENDPOINT is set (e.g. a Browserless/Browserbase
+// websocket), connect to that remote browser — so this runs in the cloud with
+// no local Chromium. Otherwise launch a local Chromium.
+async function acquireBrowser(chromium) {
+  const ws = process.env.BROWSER_WS_ENDPOINT;
+  if (ws) {
+    const browser =
+      process.env.BROWSER_CDP === 'true'
+        ? await chromium.connectOverCDP(ws)
+        : await chromium.connect(ws);
+    return { browser, remote: true };
+  }
+  const headless = process.env.AUTOMATION_HEADLESS !== 'false';
+  const browser = await chromium.launch({
+    headless,
+    args: [
+      '--disable-blink-features=AutomationControlled',
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+    ],
+  });
+  return { browser, remote: false };
 }
 
 async function snap(page, label) {
@@ -131,18 +158,12 @@ async function runTubiAction({ action, email, password }) {
     return { ok: false, error: 'email and password are required' };
   }
 
-  const headless = process.env.AUTOMATION_HEADLESS !== 'false';
   const steps = [];
   let browser;
   try {
-    browser = await chromium.launch({
-      headless,
-      args: [
-        '--disable-blink-features=AutomationControlled',
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-      ],
-    });
+    const acquired = await acquireBrowser(chromium);
+    browser = acquired.browser;
+    if (acquired.remote) steps.push('Connected to remote browser');
     const context = await browser.newContext({
       userAgent:
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

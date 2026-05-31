@@ -19,14 +19,34 @@ services on the user's behalf. **Tubi only** for now — Tubi is free
 - Screenshots (for debugging) are written to `backend/screenshots/` and served
   at `/screenshots`. They can show the logged-in account — keep them local.
 
-## Run it locally
+## Run it in the cloud (recommended — no local browser)
+
+The backend ships with `playwright-core`, which can **connect to a remote
+browser** instead of launching one. So you can test from the live site without
+installing Chromium on Render (which would OOM the free tier).
+
+1. Get a remote-browser websocket endpoint (free tiers):
+   - **Browserless** — `wss://production-sfo.browserless.io/chromium/playwright?token=YOUR_TOKEN`
+   - **Browserbase** — use its session connect URL
+2. On **Render**, set env vars and redeploy:
+   ```
+   AUTOMATION_ENABLED=true
+   BROWSER_WS_ENDPOINT=wss://...your endpoint...
+   # BROWSER_CDP=true   # only if your endpoint speaks CDP, not the Playwright protocol
+   ```
+3. On the **live dashboard**, use the "Live service automation" card.
+
+The connected browser runs on the provider's infrastructure; screenshots are
+streamed back and served from `/screenshots`.
+
+## Run it locally (alternative)
 
 ```bash
 cd backend
-npm i playwright            # not a deploy dependency; install where the worker runs
+npm i playwright            # full package, for local launch
 npx playwright install chromium
 
-# enable + (optionally) watch the browser
+# enable + (optionally) watch the browser; no BROWSER_WS_ENDPOINT = local launch
 AUTOMATION_ENABLED=true AUTOMATION_HEADLESS=false npm start
 ```
 
