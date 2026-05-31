@@ -21,6 +21,7 @@ import CostCalculator from '../../components/subscriptions/CostCalculator';
 import BillingCapture from '../../components/subscriptions/BillingCapture';
 import WatchThisMonth from '../../components/subscriptions/WatchThisMonth';
 import MonthByMonthPlan from '../../components/subscriptions/MonthByMonthPlan';
+import FreeOnMemberships from '../../components/subscriptions/FreeOnMemberships';
 import PipelineProgress, { type PipelineStep } from '../../components/pipeline/PipelineProgress';
 import { runAutomation, API_BASE, type AutomationResult } from '../../lib/api';
 import Navbar from '../../components/navigation/Navbar';
@@ -495,8 +496,14 @@ export default function DashboardPage() {
         </section>
 
         {/* ─── Multi-month plan ──────────────────────────────────────────── */}
-        {auditState === 'done' && watchPlan && watchPlan.months.length > 0 && (
-          <MonthByMonthPlan plan={watchPlan} />
+        {auditState === 'done' && watchPlan && (
+          <>
+            {watchPlan.months.length > 0 && <MonthByMonthPlan plan={watchPlan} />}
+            <FreeOnMemberships
+              shows={watchPlan.freeShows}
+              infiniteServiceIds={infiniteServiceIds}
+            />
+          </>
         )}
 
         {/* Tubi automation result (when a plan adds/removes Tubi) */}
