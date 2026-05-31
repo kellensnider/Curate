@@ -212,13 +212,16 @@ export const applyPlan = (activate: string[], cancel: string[]) =>
   );
 
 export interface AutomationResult {
-  ok: boolean;
+  ok?: boolean;
+  success?: boolean;
   action?: string;
   message?: string;
   error?: string;
   steps?: string[];
   screenshot?: string;
   url?: string;
+  plan?: string;
+  reached_payment?: boolean;
 }
 
 /**
@@ -248,6 +251,55 @@ export async function runAutomation(
   }
   return body as AutomationResult;
 }
+
+// ─── Live demo runs (browser automation + filmstrip) ─────────────────────────
+
+export interface DemoFrame {
+  seq: number;
+  url: string;   // /screenshots/...
+  label: string;
+  ts: number;
+}
+
+export interface DemoRun {
+  id: string;
+  service: string;
+  action: string;
+  status: 'running' | 'done' | 'error';
+  frames: DemoFrame[];
+  steps: Array<{ label: string; ts: number }>;
+  result: AutomationResult | null;
+  error: string | null;
+  startedAt: number;
+  finishedAt: number | null;
+}
+
+/** Start a live browser demo run; returns the run id to poll. */
+export const startDemoRun = (
+  service: string,
+  opts: { action?: 'subscribe' | 'unsubscribe'; password?: string } = {},
+) =>
+  req<{ runId: string; service: string; action: string; status: string }>(
+    '/api/automation/demo',
+    { method: 'POST', body: JSON.stringify({ service, ...opts }) },
+  );
+
+/** Poll a demo run's status, steps, and captured frames. */
+export const getDemoRun = (runId: string) =>
+  req<DemoRun>(`/api/automation/runs/${runId}`);
+
+/**
+ * Start an AI computer-use run: Gemini 2.5 Computer Use (on Vertex AI) drives a
+ * real browser to sign up for the service. Returns a run id to poll like a demo run.
+ */
+export const startAgentRun = (
+  service: string,
+  opts: { password?: string } = {},
+) =>
+  req<{ runId: string; service: string; action: string; status: string }>(
+    '/api/automation/agent',
+    { method: 'POST', body: JSON.stringify({ service, ...opts }) },
+  );
 
 export async function* streamAgentChat(
   message: string,

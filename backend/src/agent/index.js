@@ -1,7 +1,28 @@
-const Anthropic = require('@anthropic-ai/sdk');
 const { MCP_TOOLS, executeTool } = require('../mcp/server');
+const { createClient, createAnthropicClient } = require('./client');
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+// Provider-agnostic Claude client (Vertex AI or Anthropic API — see client.js).
+// Mutable so a runtime Vertex failure can transparently fall back to the
+// Anthropic API for the rest of the process (demo safety).
+let { client: anthropic, model: CLAUDE_MODEL, provider: CLAUDE_PROVIDER } = createClient();
+
+// Create a Claude message stream, falling back from Vertex to the Anthropic API
+// once if the Vertex call fails (bad ADC, API not enabled, region issue, etc.).
+async function createMessageStream(params) {
+  try {
+    return await anthropic.messages.create({ ...params, model: CLAUDE_MODEL });
+  } catch (err) {
+    if (CLAUDE_PROVIDER === 'vertex') {
+      console.error(`[curate-agent] Vertex call failed (${err.message}) — falling back to Anthropic API for this process`);
+      const fb = createAnthropicClient();
+      anthropic = fb.client;
+      CLAUDE_MODEL = fb.model;
+      CLAUDE_PROVIDER = fb.provider;
+      return await anthropic.messages.create({ ...params, model: CLAUDE_MODEL });
+    }
+    throw err;
+  }
+}
 
 const SYSTEM_PROMPT = `You are Curate, an AI subscription manager. Your job is to analyze
 the user's ranked watchlist and recommend the optimal 1-2 streaming services
@@ -46,8 +67,7 @@ async function runAgentStream(userMessage, conversationHistory = [], res, userId
   let allMessages = [...messages];
 
   while (continueLoop) {
-    const response = await anthropic.messages.create({
-      model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+    const response = await createMessageStream({
       max_tokens: 2048,
       system: buildSystemPrompt(userId),
       tools: MCP_TOOLS,

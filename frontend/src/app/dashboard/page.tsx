@@ -24,6 +24,7 @@ import MonthByMonthPlan from '../../components/subscriptions/MonthByMonthPlan';
 import FreeOnMemberships from '../../components/subscriptions/FreeOnMemberships';
 import PipelineProgress, { type PipelineStep } from '../../components/pipeline/PipelineProgress';
 import { runAutomation, API_BASE, type AutomationResult } from '../../lib/api';
+import SubscriptionSetup from '../../components/automation/SubscriptionSetup';
 import Navbar from '../../components/navigation/Navbar';
 import { calculateSubscriptionCost } from '../../lib/subscriptionCost';
 
@@ -551,6 +552,13 @@ export default function DashboardPage() {
                 </a>
               )}
             </div>
+          </section>
+        )}
+
+        {/* After an audit: let the AI agent set up next month's new subscriptions */}
+        {auditState === 'done' && toActivate.length > 0 && (
+          <section className="mb-10">
+            <SubscriptionSetup services={toActivate} password={accountPassword} />
           </section>
         )}
 

@@ -1,0 +1,22 @@
+# Curate subscriptions MCP server — Streamable HTTP transport (Cloud Run).
+# Standalone from the main backend Dockerfile: exposes only the /mcp endpoint so
+# a hosted agent (e.g. Claude on Vertex AI) can drive subscription tools.
+# Lean: the subscription-state tools talk to Mongo and need no browser.
+#
+# Build/deploy:
+#   gcloud run deploy curate-mcp --source . --dockerfile Dockerfile.mcp ...
+# (or build explicitly with `docker build -f Dockerfile.mcp`)
+FROM node:20-slim
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --omit=dev || npm install --omit=dev
+
+COPY src ./src
+
+ENV NODE_ENV=production
+# Cloud Run injects PORT (defaults to 8080); http-server.js reads process.env.PORT.
+EXPOSE 8080
+
+CMD ["node", "src/mcp/http-server.js"]
