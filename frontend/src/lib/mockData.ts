@@ -283,3 +283,103 @@ export function planFromOptionIds(
     coverage: buildServiceCoverage(orderedShows),
   };
 }
+
+/** One month of a multi-month watch plan. */
+export interface MonthPlan {
+  /** 0 = this month, 1 = next month, … */
+  monthIndex: number;
+  /** The optimal plan to subscribe to for this month's backlog. */
+  plan: OptimizationResult;
+  /** The titles to watch this month — the top `showsPerMonth` covered shows. */
+  watch: Show[];
+  /** How many watchlist titles remain unwatched after this month. */
+  remainingAfter: number;
+}
+
+export interface WatchPlan {
+  months: MonthPlan[];
+  /** Sum of every month's plan cost (what finishing the list will cost). */
+  totalCost: number;
+  /** Titles scheduled to be watched across the whole plan. */
+  totalShows: number;
+  /** Months needed to clear the (coverable) watchlist, capped by the horizon. */
+  monthsToFinish: number;
+  /** Watchlist titles no affordable plan within the horizon ever reaches. */
+  unreachable: Show[];
+}
+
+export interface MultiMonthOptions extends OptimizeOptions {
+  /** Titles the user can finish per month (drives how fast the backlog clears). */
+  showsPerMonth?: number;
+  /** Hard cap on how many months ahead to plan. */
+  horizon?: number;
+  /** Already-watched titles to exclude from planning. */
+  watchedIds?: string[];
+}
+
+/**
+ * Plans several months ahead. Each month it finds the optimal plan for the
+ * shows still on the watchlist, "watches" the top `showsPerMonth` titles that
+ * plan covers (highest watchlist rank first), then recomputes next month with
+ * those titles completed — so the recommended services naturally rotate as you
+ * burn through each service's content. Mirrors `optimizeSubscriptions` per
+ * month, so month 0's plan is exactly the single-month audit result.
+ */
+export function planMultiMonth(
+  rankedShowIds: string[],
+  pool: Show[] = SHOWS,
+  options: MultiMonthOptions = {},
+): WatchPlan {
+  const {
+    showsPerMonth = 4,
+    maxPurchases = 2,
+    maxMonthlyCost = Infinity,
+    horizon = 6,
+    watchedIds = [],
+  } = options;
+
+  const byId = new Map(pool.map((s) => [s.id, s]));
+  const watched = new Set(watchedIds);
+  // Ranked (most-wanted first), unwatched, resolvable titles.
+  let remaining = rankedShowIds
+    .filter((id) => !watched.has(id))
+    .map((id) => byId.get(id))
+    .filter((s): s is Show => Boolean(s));
+
+  const months: MonthPlan[] = [];
+  const perMonth = Math.max(1, Math.floor(showsPerMonth));
+
+  while (remaining.length > 0 && months.length < horizon) {
+    const plan = optimizeSubscriptions(
+      remaining.map((s) => s.id),
+      remaining,
+      { maxPurchases, maxMonthlyCost },
+    );
+    const granted = new Set(plan.requiredServices.map((s) => s.id));
+    const coveredThisMonth = remaining.filter((s) =>
+      s.streamingServices.some((svc) => granted.has(svc)),
+    );
+    const watch = coveredThisMonth.slice(0, perMonth);
+    // No covered titles means no affordable plan can make progress — stop.
+    if (watch.length === 0) break;
+
+    const watchedThisMonth = new Set(watch.map((s) => s.id));
+    remaining = remaining.filter((s) => !watchedThisMonth.has(s.id));
+
+    months.push({
+      monthIndex: months.length,
+      plan,
+      watch,
+      remainingAfter: remaining.length,
+    });
+  }
+
+  return {
+    months,
+    totalCost: months.reduce((sum, m) => sum + m.plan.monthlyTotal, 0),
+    totalShows: months.reduce((sum, m) => sum + m.watch.length, 0),
+    monthsToFinish: months.length,
+    // Whatever's left once we stop is unreachable within budget/horizon.
+    unreachable: remaining,
+  };
+}

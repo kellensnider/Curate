@@ -19,11 +19,11 @@ import { useAuthStore } from '../../store/useAuthStore';
 import PlanBuilder from '../../components/subscriptions/PlanBuilder';
 import CostCalculator from '../../components/subscriptions/CostCalculator';
 import BillingCapture from '../../components/subscriptions/BillingCapture';
+import WatchThisMonth from '../../components/subscriptions/WatchThisMonth';
+import MonthByMonthPlan from '../../components/subscriptions/MonthByMonthPlan';
 import PipelineProgress, { type PipelineStep } from '../../components/pipeline/PipelineProgress';
 import { runAutomation, API_BASE, type AutomationResult } from '../../lib/api';
 import Navbar from '../../components/navigation/Navbar';
-
-const MONTHS = 6;
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -34,6 +34,7 @@ export default function DashboardPage() {
     subscriptions,
     optimizedPlan,
     selectedPlan,
+    watchPlan,
     fetchSubscriptions,
     fetchPrices,
     runOptimization,
@@ -41,7 +42,7 @@ export default function DashboardPage() {
     applyPlan,
   } = useSubscriptionStore();
   const { entries, getMonthsUntilRenewal } = useBillingStore();
-  const { maxMonthlyCost, maxSubscriptions } = usePreferencesStore();
+  const { maxMonthlyCost, showsPerMonth } = usePreferencesStore();
   const {
     optionIds: scheduledIds,
     effectiveDate,
@@ -214,19 +215,7 @@ export default function DashboardPage() {
     }
   }
 
-  // ─── Timeline rows ──────────────────────────────────────────────────────────
-  const months = useMemo(
-    () =>
-      Array.from({ length: MONTHS }, (_, i) => {
-        const d = new Date();
-        d.setMonth(d.getMonth() + i);
-        return i === 0
-          ? 'This month'
-          : d.toLocaleString('default', { month: 'short', year: '2-digit' });
-      }),
-    [],
-  );
-
+  // ─── Renewal rows (active/planned services + their billing cadence) ─────────
   type RowStatus = 'keep' | 'drop' | 'add';
   const rows = useMemo(() => {
     const ids = Array.from(
@@ -241,19 +230,12 @@ export default function DashboardPage() {
         const entry = entries[id];
         const monthsLeft = getMonthsUntilRenewal(id);
         const annual = entry?.cycle === 'annual';
-        const lockedCol =
-          annual && isActive && monthsLeft !== null ? Math.min(monthsLeft, MONTHS - 1) : null;
 
         const status: RowStatus = isActive && isPlanned ? 'keep' : isActive ? 'drop' : 'add';
 
-        let startCol = 0;
-        let endCol = MONTHS - 1;
-        if (status === 'add') startCol = 1;
-        if (status === 'drop') endCol = lockedCol ?? 0;
-
         const covered = watchlistShows.filter((s) => s.streamingServices.includes(id));
 
-        return { id, svc, status, startCol, endCol, annual, monthsLeft, lockedCol, entry, covered };
+        return { id, svc, status, annual, monthsLeft, entry, covered };
       })
       .sort((a, b) => {
         const order = { drop: 0, keep: 1, add: 2 };
@@ -284,8 +266,8 @@ export default function DashboardPage() {
           <SummaryStat label="Monthly spend" value={`$${currentMonthly.toFixed(2)}`} />
           <SummaryStat label="Shows in list" value={watchlistShows.length.toString()} />
           <SummaryStat
-            label="Budget cap"
-            value={`$${maxMonthlyCost} · ${maxSubscriptions} max`}
+            label="Budget · pace"
+            value={`$${maxMonthlyCost} · ${showsPerMonth}/mo`}
             small
           />
         </div>
@@ -479,6 +461,14 @@ export default function DashboardPage() {
           </AnimatePresence>
         </section>
 
+        {/* ─── Multi-month plan ──────────────────────────────────────────── */}
+        {auditState === 'done' && watchPlan && watchPlan.months.length > 0 && (
+          <>
+            <WatchThisMonth month={watchPlan.months[0]} />
+            <MonthByMonthPlan plan={watchPlan} />
+          </>
+        )}
+
         {/* Tubi automation result (when a plan adds/removes Tubi) */}
         {tubiResult && (
           <section className="mb-10">
@@ -515,120 +505,17 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {/* ─── Timeline ──────────────────────────────────────────────────── */}
+        {/* ─── Renewals & billing ────────────────────────────────────────── */}
         <section>
           <div className="flex items-center justify-between mb-1">
-            <h2 className="text-lg font-bold text-white">Timeline</h2>
+            <h2 className="text-lg font-bold text-white">Renewals &amp; billing</h2>
             <Link href="/subscriptions" className="text-xs text-zinc-500 hover:text-zinc-300">
               Edit current subscriptions →
             </Link>
           </div>
           <p className="text-zinc-400 text-sm mb-4">
-            How long your subscriptions run, and what changes next month.
+            When your current subscriptions renew, and what to finish before they lapse.
           </p>
-
-          {rows.length === 0 ? (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center text-zinc-500 text-sm">
-              No subscriptions to show yet. Run an audit, or{' '}
-              <Link href="/subscriptions" className="text-zinc-300 underline">
-                add your current ones
-              </Link>
-              .
-            </div>
-          ) : (
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
-              {/* Month header */}
-              <div className="flex border-b border-zinc-800">
-                <div className="w-28 sm:w-36 shrink-0 px-3 py-2.5 text-xs text-zinc-500 font-medium">
-                  Service
-                </div>
-                {months.map((m, i) => (
-                  <div
-                    key={m}
-                    className={`flex-1 text-center text-xs py-2.5 border-l border-zinc-800/60 ${
-                      i === 0 ? 'text-zinc-300 font-semibold' : 'text-zinc-600'
-                    }`}
-                  >
-                    {m}
-                  </div>
-                ))}
-              </div>
-
-              {/* Rows */}
-              {rows.map((row, rowIdx) => (
-                <div
-                  key={row.id}
-                  className={`flex border-b border-zinc-800/40 ${rowIdx % 2 ? 'bg-zinc-900/50' : ''}`}
-                >
-                  <div className="w-28 sm:w-36 shrink-0 px-3 py-3 flex items-center gap-2">
-                    <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: row.svc?.brandColor ?? '#555' }}
-                    />
-                    <span className="text-xs text-white font-semibold truncate">
-                      {row.svc?.name ?? row.id}
-                    </span>
-                  </div>
-
-                  {months.map((_, colIdx) => {
-                    const inBar = colIdx >= row.startCol && colIdx <= row.endCol;
-                    const isStart = colIdx === row.startCol;
-                    const isEnd = colIdx === row.endCol;
-                    const color = row.svc?.brandColor ?? '#666';
-                    const renewalHere = row.annual && row.monthsLeft === colIdx;
-                    return (
-                      <div
-                        key={colIdx}
-                        className="flex-1 relative border-l border-zinc-800/40 py-3.5 flex items-center justify-center"
-                      >
-                        {inBar && (
-                          <div
-                            className="absolute h-1.5"
-                            style={{
-                              backgroundColor: color,
-                              opacity: row.status === 'add' ? 0.55 : 0.32,
-                              left: isStart ? '20%' : 0,
-                              right: isEnd ? '20%' : 0,
-                              borderRadius: isStart || isEnd ? 9999 : 0,
-                            }}
-                          />
-                        )}
-                        {row.status === 'drop' && isEnd && (
-                          <div className="w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-zinc-950 z-10" />
-                        )}
-                        {row.status === 'add' && isStart && (
-                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-zinc-950 z-10" />
-                        )}
-                        {renewalHere && (
-                          <div
-                            className="w-3 h-3 rounded-full border-2 border-zinc-950 z-10"
-                            style={{ backgroundColor: color }}
-                            title={`Renews ${row.entry?.renewalDate}`}
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-
-              {/* Legend */}
-              <div className="px-4 py-3 flex flex-wrap items-center gap-4 text-xs text-zinc-600">
-                <span className="flex items-center gap-1.5">
-                  <div className="w-3 h-1.5 rounded bg-zinc-500 opacity-50" /> Active
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> Starts next month
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-red-500" /> Cancels
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-full bg-zinc-400" /> Annual renewal
-                </span>
-              </div>
-            </div>
-          )}
 
           {/* Annual subscriptions with time left */}
           {annualRows.length > 0 && (

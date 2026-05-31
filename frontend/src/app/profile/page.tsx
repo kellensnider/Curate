@@ -15,8 +15,10 @@ export default function ProfilePage() {
   const {
     maxMonthlyCost,
     maxSubscriptions,
+    showsPerMonth,
     setMaxMonthlyCost,
     setMaxSubscriptions,
+    setShowsPerMonth,
   } = usePreferencesStore();
 
   useEffect(() => {
@@ -138,6 +140,39 @@ export default function ProfilePage() {
             </div>
             <p className="text-xs text-zinc-500 mt-3">
               A bundle (e.g. Disney+ &amp; Hulu) counts as a single subscription.
+            </p>
+          </div>
+
+          {/* Shows per month */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6">
+            <div className="flex items-end justify-between mb-4">
+              <div>
+                <p className="text-white font-semibold">Shows per month</p>
+                <p className="text-zinc-500 text-sm mt-0.5">
+                  How many titles you can realistically finish each month.
+                </p>
+              </div>
+              <p className="text-3xl font-black text-white">
+                {showsPerMonth}
+                <span className="text-base text-zinc-500 font-medium">/mo</span>
+              </p>
+            </div>
+            <input
+              type="range"
+              min={1}
+              max={15}
+              step={1}
+              value={showsPerMonth}
+              onChange={(e) => setShowsPerMonth(Number(e.target.value))}
+              className="w-full accent-emerald-500"
+            />
+            <div className="flex justify-between text-xs text-zinc-600 mt-2">
+              <span>1</span>
+              <span>15</span>
+            </div>
+            <p className="text-xs text-zinc-500 mt-3">
+              Curate plans your subscriptions month by month, assuming you finish
+              this many before moving on.
             </p>
           </div>
         </section>

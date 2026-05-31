@@ -1,6 +1,11 @@
 import { create } from 'zustand';
-import type { Show } from '../lib/mockData';
-import { optimizeSubscriptions, type OptimizationResult, SERVICES } from '../lib/mockData';
+import type { Show, WatchPlan } from '../lib/mockData';
+import {
+  optimizeSubscriptions,
+  planMultiMonth,
+  type OptimizationResult,
+  SERVICES,
+} from '../lib/mockData';
 import type { BackendSubscription, ServicePrice } from '../lib/api';
 import {
   getSubscriptions as apiGetSubs,
@@ -10,6 +15,7 @@ import {
   applyPlan as apiApplyPlan,
 } from '../lib/api';
 import { usePreferencesStore } from './usePreferencesStore';
+import { useWatchedStore } from './useWatchedStore';
 
 interface SubscriptionState {
   subscriptions: BackendSubscription[];
@@ -21,6 +27,7 @@ interface SubscriptionState {
   // Optimization results
   optimizedPlan: OptimizationResult | null; // the optimal recommendation (read-only reference)
   selectedPlan: OptimizationResult | null;  // what the user has chosen (defaults to optimal, editable)
+  watchPlan: WatchPlan | null;              // multi-month schedule (month 0 === optimizedPlan)
   confirmed: boolean;
 
   // Actions
@@ -43,6 +50,7 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
   error: null,
   optimizedPlan: null,
   selectedPlan: null,
+  watchPlan: null,
   confirmed: false,
 
   fetchSubscriptions: async () => {
@@ -85,19 +93,36 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
 
   runOptimization: (shows) => {
     const ids = shows.map((s) => s.id);
-    // Honor the user's Profile preferences (budget + subscription count).
-    const { maxMonthlyCost, maxSubscriptions } = usePreferencesStore.getState();
-    const plan = optimizeSubscriptions(ids, shows, {
+    // Honor the user's Profile preferences (budget + subscription count + pace).
+    const { maxMonthlyCost, maxSubscriptions, showsPerMonth } =
+      usePreferencesStore.getState();
+    const { watchedIds } = useWatchedStore.getState();
+
+    // Plan several months ahead, completing `showsPerMonth` titles each month.
+    const watchPlan = planMultiMonth(ids, shows, {
       maxPurchases: maxSubscriptions,
       maxMonthlyCost,
+      showsPerMonth,
+      watchedIds,
     });
+
+    // Month 0's plan is the actionable "next month" recommendation; fall back to
+    // a plain single-month optimize if nothing is coverable (e.g. all watched).
+    const plan =
+      watchPlan.months[0]?.plan ??
+      optimizeSubscriptions(ids, shows, {
+        maxPurchases: maxSubscriptions,
+        maxMonthlyCost,
+      });
+
     // Default the user's selection to the optimal plan; they can edit from there.
-    set({ optimizedPlan: plan, selectedPlan: plan, confirmed: false });
+    set({ optimizedPlan: plan, selectedPlan: plan, watchPlan, confirmed: false });
   },
 
   selectPlan: (plan) => set({ selectedPlan: plan, confirmed: false }),
 
   confirmPlan: () => set({ confirmed: true }),
 
-  reset: () => set({ optimizedPlan: null, selectedPlan: null, confirmed: false }),
+  reset: () =>
+    set({ optimizedPlan: null, selectedPlan: null, watchPlan: null, confirmed: false }),
 }));
