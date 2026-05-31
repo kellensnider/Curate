@@ -4,6 +4,11 @@ const { User } = require('../models');
 const { requireAuth } = require('../middleware/auth');
 const { signToken, sanitizeUser } = require('../utils/auth');
 const { ensureDefaultSubscriptions } = require('../services/subscriptionService');
+const { sendPasswordResetEmail } = require('../services/emailService');
+const {
+  createPasswordResetToken,
+  hashPasswordResetToken,
+} = require('../utils/passwordReset');
 
 const router = express.Router();
 const SALT_ROUNDS = 12;
@@ -22,6 +27,10 @@ function normalizeEmail(email) {
 
 function setTokenCookie(res, token) {
   res.cookie('token', token, cookieOptions);
+}
+
+function getFrontendUrl() {
+  return process.env.FRONTEND_URL || 'http://localhost:3000';
 }
 
 // Strong enough to also satisfy streaming-service sign-up rules, since Curate
@@ -107,6 +116,83 @@ router.post('/login', async (req, res, next) => {
     const token = signToken(user);
     setTokenCookie(res, token);
     res.json({ user: sanitizeUser(user), token });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/forgot-password', async (req, res, next) => {
+  const genericMessage = 'If an account exists for that email, a reset link has been sent.';
+
+  try {
+    const email = normalizeEmail(req.body.email);
+    if (!EMAIL_RE.test(email)) {
+      return res.json({ success: true, message: genericMessage });
+    }
+
+    const user = await User.findOne({ email }).select('email name');
+    if (user) {
+      const { token, tokenHash, expiresAt } = createPasswordResetToken();
+      await User.updateOne(
+        { _id: user._id },
+        {
+          $set: {
+            passwordResetTokenHash: tokenHash,
+            passwordResetExpiresAt: expiresAt,
+          },
+        },
+      );
+
+      const resetUrl = `${getFrontendUrl().replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(token)}`;
+
+      try {
+        await sendPasswordResetEmail({
+          to: user.email,
+          name: user.name,
+          resetUrl,
+        });
+      } catch (err) {
+        console.error('Password reset email failed:', err.message);
+        return res.status(500).json({
+          error: 'Could not send password reset email. Please try again later.',
+        });
+      }
+    }
+
+    res.json({ success: true, message: genericMessage });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/reset-password', async (req, res, next) => {
+  try {
+    const token = String(req.body.token || '').trim();
+    const password = String(req.body.password || '');
+
+    if (!token) {
+      return res.status(400).json({ error: 'Reset link is invalid or expired.' });
+    }
+    if (password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    const passwordResetTokenHash = hashPasswordResetToken(token);
+    const user = await User.findOne({
+      passwordResetTokenHash,
+      passwordResetExpiresAt: { $gt: new Date() },
+    }).select('+passwordHash +passwordResetTokenHash +passwordResetExpiresAt');
+
+    if (!user) {
+      return res.status(400).json({ error: 'Reset link is invalid or expired.' });
+    }
+
+    user.passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+    user.passwordResetTokenHash = undefined;
+    user.passwordResetExpiresAt = undefined;
+    await user.save();
+
+    res.json({ success: true, message: 'Password has been reset. You can now log in.' });
   } catch (err) {
     next(err);
   }

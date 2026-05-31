@@ -117,7 +117,14 @@ export default function AuthForm({ initialMode = 'login' }: AuthFormProps) {
             </div>
 
             <div>
-              <label className="block text-xs text-zinc-400 font-medium mb-1.5">Password</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs text-zinc-400 font-medium">Password</label>
+                {mode === 'login' && (
+                  <Link href="/forgot-password" className="text-xs text-zinc-500 hover:text-zinc-300">
+                    Forgot password?
+                  </Link>
+                )}
+              </div>
               <input
                 type="password"
                 value={password}

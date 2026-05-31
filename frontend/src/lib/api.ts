@@ -137,6 +137,18 @@ export const logout = () =>
 export const getCurrentUser = () =>
   req<{ user: AuthUser }>('/api/auth/me');
 
+export const forgotPassword = (email: string) =>
+  req<{ success: boolean; message: string }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+
+export const resetPassword = (token: string, password: string) =>
+  req<{ success: boolean; message: string }>('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  });
+
 export const checkHealth = () =>
   req<{ status: string }>('/api/health');
 
