@@ -85,6 +85,20 @@ async function dismissBanners(page) {
   }
 }
 
+// React-controlled inputs can silently drop a value set before the form
+// hydrates. Fill, then verify and re-type if it didn't stick.
+async function robustFill(page, selector, value) {
+  const el = page.locator(selector).first();
+  await el.waitFor({ state: 'visible', timeout: 15000 }).catch(() => {});
+  await el.fill(value).catch(() => {});
+  const got = await el.inputValue().catch(() => '');
+  if (got !== value) {
+    await el.click().catch(() => {});
+    await el.fill('').catch(() => {});
+    await el.type(value, { delay: 35 }).catch(() => {});
+  }
+}
+
 // Logged in once we've left the auth pages (/login, /signup) and no auth form
 // (email field) is still showing — works for both sign-in and sign-up success.
 async function isLoggedIn(page) {
@@ -157,8 +171,8 @@ async function loginTubi(page, email, password, steps) {
   await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await dismissBanners(page);
   steps.push('Entering credentials');
-  await page.fill('input[name="email"], #email-field, input[type="email"]', email);
-  await page.fill('input[name="password"], #password-field, input[type="password"]', password);
+  await robustFill(page, 'input[name="email"], #email-field, input[type="email"]', email);
+  await robustFill(page, 'input[name="password"], #password-field, input[type="password"]', password);
   steps.push('Submitting sign-in');
   await page.click('button[type="submit"]:has-text("Sign In"), button:has-text("Sign In")');
   return isLoggedIn(page);
@@ -258,9 +272,9 @@ async function registerTubi(page, { firstName, email, password }, steps) {
   await dismissBanners(page);
 
   steps.push('Filling new-account details');
-  await page.fill('input[name="firstName"], #firstName-field', firstName).catch(() => {});
-  await page.fill('input[name="email"], #email-field, input[type="email"]', email);
-  await page.fill('input[name="password"], #password-field, input[type="password"]', password);
+  await robustFill(page, 'input[name="firstName"], #firstName-field', firstName);
+  await robustFill(page, 'input[name="email"], #email-field, input[type="email"]', email);
+  await robustFill(page, 'input[name="password"], #password-field, input[type="password"]', password);
 
   steps.push('Submitting sign-up');
   await page
