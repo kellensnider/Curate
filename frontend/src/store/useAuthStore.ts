@@ -15,6 +15,9 @@ interface AuthState {
   user: AuthUser | null;
   userName: string;
   userEmail: string;
+  /** Plaintext Curate password, kept in memory only (never persisted) so the
+   *  subscription-automation agent can reuse it. Cleared on sign-out/refresh. */
+  accountPassword: string | null;
   loading: boolean;
   error: string | null;
   hydrateUser: () => Promise<void>;
@@ -40,6 +43,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       userName: '',
       userEmail: '',
+      accountPassword: null,
       loading: false,
       error: null,
 
@@ -65,7 +69,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user, token } = await apiLogin(email, password);
           setAuthToken(token);
-          set({ ...userState(user), loading: false });
+          set({ ...userState(user), accountPassword: password, loading: false });
         } catch (err) {
           set({ loading: false, error: err instanceof Error ? err.message : 'Login failed' });
           throw err;
@@ -77,7 +81,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { user, token } = await apiSignup(name, email, password);
           setAuthToken(token);
-          set({ ...userState(user), loading: false });
+          set({ ...userState(user), accountPassword: password, loading: false });
         } catch (err) {
           set({ loading: false, error: err instanceof Error ? err.message : 'Signup failed' });
           throw err;
@@ -96,6 +100,7 @@ export const useAuthStore = create<AuthState>()(
           user: null,
           userName: '',
           userEmail: '',
+          accountPassword: null,
           error: null,
         });
       },

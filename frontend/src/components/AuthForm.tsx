@@ -21,6 +21,16 @@ export default function AuthForm({ initialMode = 'login' }: AuthFormProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // Strong enough to also satisfy streaming-service sign-up rules, since Curate
+  // reuses this password to create those accounts.
+  const pwRules = [
+    { label: 'At least 8 characters', ok: password.length >= 8 },
+    { label: 'An uppercase letter', ok: /[A-Z]/.test(password) },
+    { label: 'A lowercase letter', ok: /[a-z]/.test(password) },
+    { label: 'A number', ok: /[0-9]/.test(password) },
+  ];
+  const pwValid = pwRules.every((r) => r.ok);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -109,12 +119,28 @@ export default function AuthForm({ initialMode = 'login' }: AuthFormProps) {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="password123"
+                placeholder="••••••••"
                 minLength={8}
                 required
                 className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm px-4 py-2.5 rounded-xl focus:outline-none focus:border-zinc-500 placeholder-zinc-600 transition"
               />
             </div>
+
+            {mode === 'signup' && password.length > 0 && (
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {pwRules.map((r) => (
+                  <div
+                    key={r.label}
+                    className={`flex items-center gap-1.5 text-[11px] ${
+                      r.ok ? 'text-emerald-400' : 'text-zinc-500'
+                    }`}
+                  >
+                    <span>{r.ok ? '✓' : '○'}</span>
+                    {r.label}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-950/50 border border-red-900/50 text-red-300 rounded-xl px-3 py-2 text-xs">
@@ -124,7 +150,7 @@ export default function AuthForm({ initialMode = 'login' }: AuthFormProps) {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (mode === 'signup' && !pwValid)}
               className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-zinc-100 active:scale-95 disabled:opacity-50 transition-all text-sm mt-2"
             >
               {loading ? 'Working...' : mode === 'login' ? 'Sign In' : 'Create Account'}

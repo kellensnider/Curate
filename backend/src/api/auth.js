@@ -24,6 +24,17 @@ function setTokenCookie(res, token) {
   res.cookie('token', token, cookieOptions);
 }
 
+// Strong enough to also satisfy streaming-service sign-up rules, since Curate
+// reuses this password to create accounts on those services.
+function passwordPolicyError(password) {
+  const pw = String(password || '');
+  if (pw.length < 8) return 'Password must be at least 8 characters';
+  if (!/[A-Z]/.test(pw)) return 'Password must include an uppercase letter';
+  if (!/[a-z]/.test(pw)) return 'Password must include a lowercase letter';
+  if (!/[0-9]/.test(pw)) return 'Password must include a number';
+  return null;
+}
+
 function validateCredentials({ name, email, password }, requireName = false) {
   if (requireName && !String(name || '').trim()) {
     return 'Name is required';
@@ -31,8 +42,13 @@ function validateCredentials({ name, email, password }, requireName = false) {
   if (!EMAIL_RE.test(normalizeEmail(email))) {
     return 'Invalid email';
   }
-  if (!password || String(password).length < 8) {
-    return 'Password must be at least 8 characters';
+  // Enforce the full policy on sign-up; for login just require a non-empty
+  // password (existing accounts may predate the policy).
+  if (requireName) {
+    const pwError = passwordPolicyError(password);
+    if (pwError) return pwError;
+  } else if (!password || String(password).length < 1) {
+    return 'Password is required';
   }
   return null;
 }

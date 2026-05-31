@@ -26,12 +26,16 @@ router.post('/:service', requireAuth, async (req, res) => {
     return res.status(404).json({ error: `No automation runner for "${req.params.service}"` });
   }
 
-  const { action = 'subscribe', email, password } = req.body || {};
+  const { action = 'subscribe', password } = req.body || {};
+  // The streaming account uses the user's Curate identity. Email comes from the
+  // authenticated token (can't be spoofed); the client only supplies the
+  // password to use (their Curate password).
+  const email = req.user.email;
   if (!['subscribe', 'unsubscribe'].includes(action)) {
     return res.status(400).json({ error: 'action must be "subscribe" or "unsubscribe"' });
   }
   if (!email || !password) {
-    return res.status(400).json({ error: 'email and password are required' });
+    return res.status(400).json({ error: 'password is required' });
   }
 
   try {

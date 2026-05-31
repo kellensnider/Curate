@@ -214,7 +214,6 @@ export interface AutomationResult {
 export async function runAutomation(
   service: string,
   action: 'subscribe' | 'unsubscribe',
-  email: string,
   password: string,
 ): Promise<AutomationResult> {
   const headers = new Headers({ 'Content-Type': 'application/json' });
@@ -225,7 +224,8 @@ export async function runAutomation(
     method: 'POST',
     credentials: 'include',
     headers,
-    body: JSON.stringify({ action, email, password }),
+    // Email comes from the auth token server-side; only the password is sent.
+    body: JSON.stringify({ action, password }),
   });
   const body = await res.json().catch(() => ({}));
   if (res.status === 401 || res.status === 403 || res.status >= 500) {
