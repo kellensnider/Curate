@@ -58,7 +58,15 @@ export default function AuthForm({ initialMode = 'login' }: AuthFormProps) {
         className="w-full max-w-sm"
       >
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-black text-white">curate</h1>
+          <h1 className="flex items-center justify-center gap-2 text-4xl font-black text-white">
+            <img
+              src="/curate-logo.png"
+              alt=""
+              aria-hidden="true"
+              className="h-10 w-10 object-contain"
+            />
+            curate
+          </h1>
           <p className="text-zinc-500 text-sm mt-2">Smart streaming. Zero waste.</p>
         </div>
 
