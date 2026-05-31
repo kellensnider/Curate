@@ -217,7 +217,11 @@ async function registerTubi(page, { firstName, email, password }, steps) {
     .catch(() => {});
   await page.waitForTimeout(2500);
 
-  if (await emailExistsError(page)) return { ok: false, reason: 'exists' };
+  // Account already exists if Tubi shows an inline error OR bounces us to the
+  // sign-in page — caller should sign in instead.
+  if (page.url().includes('/login') || (await emailExistsError(page))) {
+    return { ok: false, reason: 'exists' };
+  }
 
   // Optional 2nd step (date of birth, etc.) then a final submit.
   await fillBirthIfPresent(page, steps);
@@ -273,44 +277,47 @@ async function runTubiAction({ action, email, password }) {
     // ── Subscribe = create a new Tubi account (fall back to sign-in if it
     //    already exists), so it works whether or not the user has an account.
     if (action === 'subscribe') {
-      const reg = await registerTubi(page, { firstName, email, password }, steps);
-      if (reg.ok) {
-        const screenshot = await snap(page, 'tubi-subscribe');
+      // "Subscribe" = end up with an active account. Try one path, fall back to
+      // the other. Default order is sign-up → sign-in; flip with
+      //   TUBI_SUBSCRIBE_ORDER=login-first
+      const loginFirst = process.env.TUBI_SUBSCRIBE_ORDER === 'login-first';
+
+      const trySignup = async () => {
+        const r = await registerTubi(page, { firstName, email, password }, steps);
+        return { ok: r.ok, kind: 'created' };
+      };
+      const trySignin = async () => {
+        const ok = await loginTubi(page, email, password, steps);
+        return { ok, kind: 'signed-in' };
+      };
+
+      const [first, second] = loginFirst ? [trySignin, trySignup] : [trySignup, trySignin];
+      steps.push(loginFirst ? 'Trying sign-in first' : 'Trying sign-up first');
+
+      let result = await first();
+      if (!result.ok) {
+        steps.push(loginFirst ? 'No existing account — trying sign-up' : 'Sign-up unavailable — trying sign-in');
+        result = await second();
+      }
+
+      const screenshot = await snap(page, result.ok ? 'tubi-subscribe' : 'tubi-subscribe-failed');
+      if (result.ok) {
         return {
           ok: true,
           action: 'subscribe',
-          message: 'Subscribed: created a new Tubi account',
+          message:
+            result.kind === 'created'
+              ? 'Subscribed: created a new Tubi account'
+              : 'Subscribed: signed into existing Tubi account',
           steps,
           screenshot,
         };
       }
-      if (reg.reason === 'exists') {
-        steps.push('Email already registered — signing in instead');
-        const loggedIn = await loginTubi(page, email, password, steps);
-        const screenshot = await snap(page, loggedIn ? 'tubi-subscribe' : 'tubi-subscribe-failed');
-        return loggedIn
-          ? {
-              ok: true,
-              action: 'subscribe',
-              message: 'Already had a Tubi account — signed in',
-              steps,
-              screenshot,
-            }
-          : {
-              ok: false,
-              action: 'subscribe',
-              error: 'Account already exists but sign-in failed — check the password.',
-              steps,
-              screenshot,
-              url: page.url(),
-            };
-      }
-      const screenshot = await snap(page, 'tubi-subscribe-failed');
       return {
         ok: false,
         action: 'subscribe',
         error:
-          'Sign-up did not complete — likely an extra step (e.g. date of birth) or a CAPTCHA. See screenshot.',
+          'Could not sign in or create a Tubi account — likely an extra sign-up step (e.g. date of birth) or a CAPTCHA. See screenshot.',
         steps,
         screenshot,
         url: page.url(),
