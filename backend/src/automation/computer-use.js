@@ -13,8 +13,29 @@
  *
  * Coordinates from the model are normalized to [0,1000); we scale to viewport px.
  */
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { GoogleAuth } = require('google-auth-library');
 const { pushStep, pushFrame, finishRun } = require('./runs');
+
+// On hosts without gcloud ADC (e.g. Render), accept the Vertex service-account
+// key as an env var (GOOGLE_CREDENTIALS_JSON) and write it to a file that
+// google-auth-library picks up. If GOOGLE_APPLICATION_CREDENTIALS already points
+// at a key (e.g. a Render Secret File), that's used as-is.
+function ensureGoogleCreds() {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS) return;
+  const json = process.env.GOOGLE_CREDENTIALS_JSON;
+  if (!json) return;
+  try {
+    const file = path.join(os.tmpdir(), 'curate-vertex-sa.json');
+    fs.writeFileSync(file, json);
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = file;
+  } catch (err) {
+    console.error('[computer-use] failed to write service-account key:', err.message);
+  }
+}
+ensureGoogleCreds();
 
 const PROJECT = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
 const REGION = process.env.COMPUTER_USE_REGION || 'global';
@@ -130,23 +151,47 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
     return;
   }
 
+  // Remote browser (e.g. Browserbase) when BROWSER_WS_ENDPOINT is set — so a
+  // host that can't run Chromium (Render free) still drives a real browser.
+  // Otherwise launch locally (headed for the live demo).
+  const ws = process.env.BROWSER_WS_ENDPOINT;
+  const remote = Boolean(ws);
   const headless = process.env.AUTOMATION_HEADLESS !== 'false';
   const slowMo = Number(process.env.BROWSER_SLOWMO) || 0;
-  const browser = await chromium.launch({
-    headless, slowMo,
-    args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
-  });
+  const browser = remote
+    ? (process.env.BROWSER_CDP === 'false' ? await chromium.connect(ws) : await chromium.connectOverCDP(ws))
+    : await chromium.launch({
+        headless, slowMo,
+        args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
+      });
 
   try {
     const token = await auth.getAccessToken();
-    const context = await browser.newContext({
-      viewport: VIEWPORT,
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    });
-    const page = await context.newPage();
+    // Reuse the remote browser's default context; create a fresh one locally.
+    const context = remote
+      ? (browser.contexts()[0] || await browser.newContext({ viewport: VIEWPORT }))
+      : await browser.newContext({
+          viewport: VIEWPORT,
+          userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        });
+    const page = context.pages()[0] || await context.newPage();
+    if (remote) await page.setViewportSize(VIEWPORT).catch(() => {});
     await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
 
-    const shot = async () => (await page.screenshot()).toString('base64');
+    // Resilient screenshot: pages often navigate between actions, which can make
+    // a single capture protocol-error. Retry briefly before giving up.
+    const shot = async () => {
+      for (let i = 0; i < 3; i++) {
+        try {
+          return (await page.screenshot({ timeout: 15000 })).toString('base64');
+        } catch (err) {
+          if (i === 2) throw err;
+          await page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
+          await page.waitForTimeout(600);
+        }
+      }
+      return '';
+    };
     let screenshot = await shot();
     pushStep(run, `Goal: ${goal}`);
     pushFrame(run, Buffer.from(screenshot, 'base64'), 'start');
