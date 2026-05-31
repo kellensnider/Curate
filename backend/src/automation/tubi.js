@@ -186,8 +186,10 @@ async function authFailureHint(page) {
 }
 
 async function emailExistsError(page) {
+  // IMPORTANT: do NOT match the benign "Already have an account? Sign In" prompt
+  // that is always present on the sign-up page — only real "exists" errors.
   return page
-    .locator('text=/already (have|exists|in use|registered|taken)|account (already )?exists|email.*(taken|in use)/i')
+    .locator('text=/already (exists|in use|registered|taken)|account already exists|email is already/i')
     .first()
     .isVisible({ timeout: 1500 })
     .catch(() => false);
@@ -264,13 +266,25 @@ async function registerTubi(page, { firstName, email, password }, steps) {
   await page
     .click('button[type="submit"]:has-text("Next"), button:has-text("Next"), button[type="submit"]')
     .catch(() => {});
-  await page.waitForTimeout(2500);
 
-  // Account already exists if Tubi shows an inline error OR bounces us to the
-  // sign-in page — caller should sign in instead.
-  if (page.url().includes('/login') || (await emailExistsError(page))) {
-    return { ok: false, reason: 'exists' };
+  // SUCCESS is signalled by advancing to Tubi's Age/Gender step (#age-field).
+  // Wait for that as the source of truth — don't infer "exists" from page text.
+  const reachedStep2 = await page
+    .locator('#age-field, input[name="age"]')
+    .first()
+    .waitFor({ state: 'visible', timeout: 12000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!reachedStep2) {
+    // Didn't advance: the email already exists (Tubi bounces to /login or shows
+    // a real error), or sign-up was blocked (CAPTCHA / bot check).
+    if (page.url().includes('/login') || (await emailExistsError(page))) {
+      return { ok: false, reason: 'exists' };
+    }
+    return { ok: false, reason: 'unknown' };
   }
+  steps.push('Reached age/gender step');
 
   // Step 2 is Tubi's Age + Gender screen; handle it specifically.
   const did2 = await completeTubiAgeGender(page, steps);
