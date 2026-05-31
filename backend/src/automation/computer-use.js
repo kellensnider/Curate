@@ -37,6 +37,11 @@ function ensureGoogleCreds() {
 }
 ensureGoogleCreds();
 
+// Two auth paths:
+//  - GEMINI_API_KEY set → call the Gemini API (AI Studio) with an API key. No
+//    service account needed — works where org policy blocks SA-key creation.
+//  - else → call Vertex AI with the service-account / ADC bearer token.
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 const PROJECT = process.env.GCP_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
 const REGION = process.env.COMPUTER_USE_REGION || 'global';
 const MODEL = process.env.COMPUTER_USE_MODEL || 'gemini-2.5-computer-use-preview-10-2025';
@@ -52,14 +57,21 @@ function loadChromium() {
 }
 
 function endpoint() {
+  if (GEMINI_API_KEY) {
+    return `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+  }
   const host = REGION === 'global' ? 'aiplatform.googleapis.com' : `${REGION}-aiplatform.googleapis.com`;
   return `https://${host}/v1/projects/${PROJECT}/locations/${REGION}/publishers/google/models/${MODEL}:generateContent`;
 }
 
 async function generate(contents, token) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (GEMINI_API_KEY) headers['x-goog-api-key'] = GEMINI_API_KEY;
+  else headers['Authorization'] = `Bearer ${token}`;
+
   const res = await fetch(endpoint(), {
     method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ contents, tools: [{ computerUse: { environment: 'ENVIRONMENT_BROWSER' } }] }),
   });
   const json = await res.json();
@@ -141,8 +153,8 @@ async function executeAction(page, name, args) {
  * an error occurs. Streams reasoning + screenshots into `run`.
  */
 async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
-  if (!PROJECT) {
-    finishRun(run, { error: new Error('GCP_PROJECT_ID not set — computer-use needs Vertex') });
+  if (!GEMINI_API_KEY && !PROJECT) {
+    finishRun(run, { error: new Error('Set GEMINI_API_KEY (Gemini API) or GCP_PROJECT_ID (Vertex) for computer-use') });
     return;
   }
   const chromium = loadChromium();
@@ -158,15 +170,18 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
   const remote = Boolean(ws);
   const headless = process.env.AUTOMATION_HEADLESS !== 'false';
   const slowMo = Number(process.env.BROWSER_SLOWMO) || 0;
+  // Match tubi.js: default to Playwright-protocol connect (Browserless), opt into
+  // CDP with BROWSER_CDP=true (Browserbase). Local launch when no endpoint.
   const browser = remote
-    ? (process.env.BROWSER_CDP === 'false' ? await chromium.connect(ws) : await chromium.connectOverCDP(ws))
+    ? (process.env.BROWSER_CDP === 'true' ? await chromium.connectOverCDP(ws) : await chromium.connect(ws))
     : await chromium.launch({
         headless, slowMo,
         args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
       });
 
   try {
-    const token = await auth.getAccessToken();
+    // Gemini API uses the key header (no token); Vertex needs an ADC bearer token.
+    const token = GEMINI_API_KEY ? null : await auth.getAccessToken();
     // Reuse the remote browser's default context; create a fresh one locally.
     const context = remote
       ? (browser.contexts()[0] || await browser.newContext({ viewport: VIEWPORT }))
