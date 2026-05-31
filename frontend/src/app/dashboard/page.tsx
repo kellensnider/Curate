@@ -19,6 +19,7 @@ import { useAuthStore } from '../../store/useAuthStore';
 import PlanBuilder from '../../components/subscriptions/PlanBuilder';
 import CostCalculator from '../../components/subscriptions/CostCalculator';
 import BillingCapture from '../../components/subscriptions/BillingCapture';
+import AutomationPanel from '../../components/automation/AutomationPanel';
 import PipelineProgress, { type PipelineStep } from '../../components/pipeline/PipelineProgress';
 import Navbar from '../../components/navigation/Navbar';
 
@@ -451,6 +452,11 @@ export default function DashboardPage() {
               </motion.div>
             )}
           </AnimatePresence>
+        </section>
+
+        {/* ─── Live automation (testing) ─────────────────────────────────── */}
+        <section className="mb-10">
+          <AutomationPanel />
         </section>
 
         {/* ─── Timeline ──────────────────────────────────────────────────── */}

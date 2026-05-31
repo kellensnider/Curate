@@ -1,6 +1,7 @@
 import type { Show } from './mockData';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001';
+export const API_BASE = BASE;
 const TOKEN_KEY = 'curate-token';
 
 export interface AuthUser {
@@ -194,6 +195,44 @@ export const applyPlan = (activate: string[], cancel: string[]) =>
     '/api/subscriptions/apply',
     { method: 'POST', body: JSON.stringify({ activate, cancel }) },
   );
+
+export interface AutomationResult {
+  ok: boolean;
+  action?: string;
+  message?: string;
+  error?: string;
+  steps?: string[];
+  screenshot?: string;
+  url?: string;
+}
+
+/**
+ * Drive real subscribe/unsubscribe automation for a service (testing harness).
+ * Returns the runner's JSON for both success and "ran but failed" (422); throws
+ * only when automation is unavailable (disabled / unauthorized / server error).
+ */
+export async function runAutomation(
+  service: string,
+  action: 'subscribe' | 'unsubscribe',
+  email: string,
+  password: string,
+): Promise<AutomationResult> {
+  const headers = new Headers({ 'Content-Type': 'application/json' });
+  const token = getAuthToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+
+  const res = await fetch(`${BASE}/api/automation/${service}`, {
+    method: 'POST',
+    credentials: 'include',
+    headers,
+    body: JSON.stringify({ action, email, password }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 401 || res.status === 403 || res.status >= 500) {
+    throw new Error(body?.error || `Automation unavailable (${res.status})`);
+  }
+  return body as AutomationResult;
+}
 
 export async function* streamAgentChat(
   message: string,
