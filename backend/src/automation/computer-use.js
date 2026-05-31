@@ -213,11 +213,13 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
     await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
 
     // Resilient screenshot: pages often navigate between actions, which can make
-    // a single capture protocol-error. Retry briefly before giving up.
+    // a single capture protocol-error. Retry briefly before giving up. JPEG keeps
+    // the payload small → faster upload + faster model inference, so the whole
+    // flow finishes inside the remote browser's session window.
     const shot = async () => {
       for (let i = 0; i < 3; i++) {
         try {
-          return (await page.screenshot({ timeout: 15000 })).toString('base64');
+          return (await page.screenshot({ type: 'jpeg', quality: 55, timeout: 15000 })).toString('base64');
         } catch (err) {
           if (i === 2) throw err;
           await page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
@@ -235,7 +237,7 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
       role: 'user',
       parts: [
         { text: `${goal}\nThe browser viewport is ${VIEWPORT.width}x${VIEWPORT.height}. You are already on ${startUrl}.` },
-        { inlineData: { mimeType: 'image/png', data: screenshot } },
+        { inlineData: { mimeType: 'image/jpeg', data: screenshot } },
       ],
     }];
 
@@ -290,7 +292,7 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
 
       // One screenshot after the turn's actions; attach it to the last response.
       screenshot = await shot();
-      responseParts[responseParts.length - 1].functionResponse.parts = [{ inlineData: { mimeType: 'image/png', data: screenshot } }];
+      responseParts[responseParts.length - 1].functionResponse.parts = [{ inlineData: { mimeType: 'image/jpeg', data: screenshot } }];
       pushFrame(run, Buffer.from(screenshot, 'base64'), redactPAN(`${lastLabel}${reasoning ? ' — ' + reasoning.slice(0, 60) : ''}`));
 
       // If the account-creation action was submitted this turn, finish cleanly —
