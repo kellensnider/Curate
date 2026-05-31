@@ -209,8 +209,10 @@ async function acquireBrowserbase(chromium) {
     headers: { 'X-BB-API-Key': apiKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       projectId,
-      // Residential proxy defeats datacenter-IP blocks; disable with BROWSERBASE_PROXIES=false.
-      proxies: process.env.BROWSERBASE_PROXIES !== 'false',
+      // Residential proxy defeats datacenter-IP blocks (e.g. Disney) but is a PAID
+      // Browserbase feature — opt in with BROWSERBASE_PROXIES=true. Off by default
+      // so the free plan works (headless + long sessions still apply).
+      proxies: process.env.BROWSERBASE_PROXIES === 'true',
       browserSettings: { viewport: { width: VIEWPORT.width, height: VIEWPORT.height } },
     }),
   });
