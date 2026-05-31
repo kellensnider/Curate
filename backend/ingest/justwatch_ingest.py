@@ -76,9 +76,6 @@ SERVICE_ALIASES = {
     "amazon prime video": "prime",
     "prime video": "prime",
     "amazon video": "prime",
-    "apple tv plus": "appletv",
-    "apple tv+": "appletv",
-    "apple tv": "appletv",
     "paramount plus": "paramount",
     "paramount+": "paramount",
 }

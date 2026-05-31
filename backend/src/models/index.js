@@ -12,7 +12,6 @@ const SERVICE_PRICES = {
   max: { name: 'Max', monthly: 15.99 },
   peacock: { name: 'Peacock', monthly: 7.99 },
   prime: { name: 'Prime Video', monthly: 8.99 },
-  appletv: { name: 'Apple TV+', monthly: 9.99 },
   paramount: { name: 'Paramount+', monthly: 7.99 },
   tubi: { name: 'Tubi', monthly: 0 },
 };

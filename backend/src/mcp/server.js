@@ -57,7 +57,7 @@ const MCP_TOOLS = [
       type: 'object',
       properties: {
         user_id: { type: 'string' },
-        service: { type: 'string', description: 'Service key: netflix, hulu, disney, max, peacock, prime, appletv, paramount' },
+        service: { type: 'string', description: 'Service key: netflix, hulu, disney, max, peacock, prime, paramount' },
       },
       required: ['user_id', 'service'],
     },
@@ -69,7 +69,7 @@ const MCP_TOOLS = [
       type: 'object',
       properties: {
         user_id: { type: 'string' },
-        service: { type: 'string', description: 'Service key: netflix, hulu, disney, max, peacock, prime, appletv, paramount' },
+        service: { type: 'string', description: 'Service key: netflix, hulu, disney, max, peacock, prime, paramount' },
       },
       required: ['user_id', 'service'],
     },

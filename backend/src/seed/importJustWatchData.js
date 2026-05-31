@@ -9,6 +9,19 @@ const DEFAULT_INPUT_PATH = path.resolve(__dirname, '../../../data/justwatch_show
 const VALID_TYPES = new Set(['movie', 'series']);
 const TARGET_CATALOG_COUNT = 2000;
 
+// Apple TV+ is dropped from the catalog: its rental offers double-counted with
+// Prime Video across many titles. Strip it on import so re-running this against
+// the raw JustWatch dump never reintroduces it.
+const EXCLUDED_SERVICES = new Set(['appletv']);
+
+function filterServices(services) {
+  return (Array.isArray(services) ? services : []).filter((s) => !EXCLUDED_SERVICES.has(s));
+}
+
+function filterOffers(offers) {
+  return (Array.isArray(offers) ? offers : []).filter((o) => !EXCLUDED_SERVICES.has(o?.service));
+}
+
 function validateRecord(record, index, existingShow) {
   if (!record || typeof record !== 'object') {
     return `record ${index} is not an object`;
@@ -46,11 +59,11 @@ function mapShow(record, existingShow) {
     type: record.type,
     genre: Array.isArray(record.genre) ? record.genre : [],
     year: normalizeYear(record.year),
-    services: Array.isArray(record.services) ? record.services : [],
+    services: filterServices(record.services),
     posterUrl: record.posterUrl || existingShow?.posterUrl,
     backdropUrl: record.backdropUrl || existingShow?.backdropUrl,
     overview: record.overview || existingShow?.overview,
-    offers: Array.isArray(record.offers) ? record.offers : [],
+    offers: filterOffers(record.offers),
     priorityWeight: Number.isFinite(Number(record.priorityWeight))
       ? Number(record.priorityWeight)
       : existingShow?.priorityWeight || 5,
@@ -109,6 +122,13 @@ async function importJustWatchData() {
       }
 
       const mapped = mapShow(record, existingShow);
+
+      // Skip titles left with no streaming service after excluding Apple TV+.
+      if (mapped.services.length === 0) {
+        skipped++;
+        continue;
+      }
+
       await Show.updateOne(
         { externalId: mapped.externalId },
         { $set: mapped },

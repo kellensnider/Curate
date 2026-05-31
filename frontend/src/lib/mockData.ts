@@ -49,7 +49,6 @@ export const SERVICES: Service[] = [
   { id: 'disney', name: 'Disney+', monthlyPrice: 13.99, brandColor: '#113CCF', logo: 'DISNEY+' },
   { id: 'hulu', name: 'Hulu', monthlyPrice: 17.99, brandColor: '#1CE783', logo: 'HULU' },
   { id: 'max', name: 'Max', monthlyPrice: 15.99, brandColor: '#8B5CF6', logo: 'MAX' },
-  { id: 'appletv', name: 'Apple TV+', monthlyPrice: 9.99, brandColor: '#F5F5F7', logo: 'APPLE TV+' },
   { id: 'peacock', name: 'Peacock', monthlyPrice: 7.99, brandColor: '#FFD700', logo: 'PEACOCK' },
   { id: 'paramount', name: 'Paramount+', monthlyPrice: 7.99, brandColor: '#0064FF', logo: 'PARAMOUNT+' },
   { id: 'prime', name: 'Prime Video', monthlyPrice: 8.99, brandColor: '#00A8E1', logo: 'PRIME' },
@@ -74,7 +73,6 @@ export const ALL_SERVICES_TOTAL = SERVICES.reduce((sum, service) => sum + servic
 export const BUNDLES: PlanOption[] = [
   { id: 'disney_hulu',     name: 'Disney+ & Hulu',      monthlyPrice: 12.99, services: ['disney', 'hulu'],        isBundle: true },
   { id: 'disney_hulu_max', name: 'Disney+, Hulu & Max', monthlyPrice: 19.99, services: ['disney', 'hulu', 'max'], isBundle: true },
-  { id: 'appletv_peacock', name: 'Apple TV+ & Peacock', monthlyPrice: 14.99, services: ['appletv', 'peacock'],    isBundle: true },
 ];
 
 /** Every purchasable option: each individual service plus every bundle. */

@@ -7,7 +7,6 @@ const SERVICE_KEYS = [
   'max',
   'peacock',
   'prime',
-  'appletv',
   'paramount',
   'tubi',
 ];

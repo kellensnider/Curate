@@ -91,7 +91,6 @@ Curate only maps these 8 streaming providers for now:
 - Max
 - Peacock
 - Prime Video
-- Apple TV+
 - Paramount+
 
 Unsupported providers are ignored for Curate availability, but raw JustWatch
