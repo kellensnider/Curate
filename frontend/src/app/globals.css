@@ -10,11 +10,31 @@
 
 html {
   font-family: 'Inter', system-ui, sans-serif;
+  overflow-x: hidden;
 }
 
 body {
   background-color: #09090b;
   color: #f4f4f5;
+}
+
+/* Poster background scroll animations */
+@keyframes scroll-up {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+@keyframes scroll-down {
+  0%   { transform: translateY(-50%); }
+  100% { transform: translateY(0); }
+}
+
+.poster-col-up {
+  animation: scroll-up linear infinite;
+}
+
+.poster-col-down {
+  animation: scroll-down linear infinite;
 }
 
 /* Smooth scrollbar */

@@ -15,30 +15,56 @@ const STATS = [
 
 export default function HomePage() {
   const { isAuthenticated, userName } = useAuthStore();
-  const posters = useMemo(() => {
+  const COLUMN_COUNT = 8;
+  const columns = useMemo(() => {
     const withPosters = SHOWS.filter((s) => s.posterUrl);
-    return withPosters.slice(0, 56);
+    const cols = Array.from({ length: COLUMN_COUNT }, () => []);
+    withPosters.forEach((show, idx) => cols[idx % COLUMN_COUNT].push(show));
+    // Ensure each column has enough items to fill more than screen height when doubled
+    return cols.map((col) => {
+      let padded = [...col];
+      while (padded.length < 6) padded = [...padded, ...padded];
+      return padded;
+    });
   }, []);
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-zinc-950">
-      <div className="absolute inset-0">
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-1.5 p-1.5 opacity-40">
-          {posters.map((show) => (
-            <div key={show.id} className="rounded-md overflow-hidden" style={{ aspectRatio: '2/3' }}>
-              <img
-                src={show.posterUrl}
-                alt=""
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
+      {/* Scrolling poster columns */}
+      <div className="absolute inset-0 overflow-hidden flex gap-1.5 p-1.5">
+        {columns.map((col, i) => {
+          const isDown = i % 2 !== 0;
+          // Vary duration per column: 56s–92s
+          const duration = 56 + i * 5;
+          return (
+            <div key={i} className="flex-1 overflow-hidden" style={{ opacity: 0.75 }}>
+              <div
+                className={isDown ? 'poster-col-down' : 'poster-col-up'}
+                style={{ animationDuration: `${duration}s` }}
+              >
+                {/* Double items so the loop is seamless */}
+                {[...col, ...col].map((show, j) => (
+                  <div
+                    key={j}
+                    className="rounded-md overflow-hidden mb-1.5"
+                    style={{ aspectRatio: '2/3' }}
+                  >
+                    <img
+                      src={show.posterUrl}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
-      <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/70 via-zinc-950/85 to-zinc-950" />
-      <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-transparent to-zinc-950/80" />
+      <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/50 via-zinc-950/70 to-zinc-950" />
+      <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/70 via-transparent to-zinc-950/70" />
 
       <header className="relative z-10 max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2 text-white font-black text-2xl tracking-tight">

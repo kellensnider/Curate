@@ -68,13 +68,9 @@ export default function BrowsePage() {
           </p>
         </motion.div>
 
-        {/* Sticky filters */}
-        <div
-          className="sticky z-30 pb-4"
-          style={{ top: 60, background: '#09090b', marginLeft: -24, marginRight: -24, paddingLeft: 24, paddingRight: 24 }}
-        >
-          {/* Search */}
-          <div className="relative mb-3">
+        {/* Sticky search bar only */}
+        <div className="sticky z-30 pb-3" style={{ top: 60 }}>
+          <div className="relative">
             <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" width="16" height="16" viewBox="0 0 16 16" fill="none">
               <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.5" />
               <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -87,10 +83,12 @@ export default function BrowsePage() {
               className="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-600 transition-colors"
             />
           </div>
+        </div>
 
+        {/* Static filters */}
+        <div className="pb-4">
           <GenreFilter genres={BROWSE_GENRES} active={activeGenre} onChange={setActiveGenre} />
 
-          {/* Service filters */}
           <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
             <button
               onClick={() => setActiveService(null)}
