@@ -211,10 +211,13 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
   let ws = process.env.BROWSER_WS_ENDPOINT;
   const remote = Boolean(ws);
   // Remote sessions (e.g. Browserless) default to a short timeout that can expire
-  // mid-signup. Extend it so the agent has time to finish all steps.
-  if (ws && /browserless/i.test(ws) && !/[?&]timeout=/.test(ws)) {
-    const sep = ws.includes('?') ? '&' : '?';
-    ws += `${sep}timeout=${process.env.BROWSER_SESSION_TIMEOUT_MS || 240000}`;
+  // mid-flow. FORCE a long session timeout — replacing any short value already in
+  // the URL — so longer flows (account deletion) aren't cut off at the last step.
+  if (ws && /browserless/i.test(ws)) {
+    const ms = process.env.BROWSER_SESSION_TIMEOUT_MS || 300000;
+    ws = /[?&]timeout=\d+/i.test(ws)
+      ? ws.replace(/([?&]timeout=)\d+/i, `$1${ms}`)
+      : ws + (ws.includes('?') ? '&' : '?') + `timeout=${ms}`;
   }
   const headless = process.env.AUTOMATION_HEADLESS !== 'false';
   const slowMo = Number(process.env.BROWSER_SLOWMO) || 0;
