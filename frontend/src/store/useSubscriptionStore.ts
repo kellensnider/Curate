@@ -7,7 +7,9 @@ import {
   getServicePrices as apiGetPrices,
   activateService as apiActivate,
   cancelService as apiCancel,
+  applyPlan as apiApplyPlan,
 } from '../lib/api';
+import { usePreferencesStore } from './usePreferencesStore';
 
 interface SubscriptionState {
   subscriptions: BackendSubscription[];
@@ -26,6 +28,7 @@ interface SubscriptionState {
   fetchPrices: () => Promise<void>;
   activate: (service: string) => Promise<void>;
   cancel: (service: string) => Promise<void>;
+  applyPlan: (activate: string[], cancel: string[]) => Promise<void>;
   runOptimization: (shows: Show[]) => void;
   selectPlan: (plan: OptimizationResult | null) => void;
   confirmPlan: () => void;
@@ -75,9 +78,19 @@ export const useSubscriptionStore = create<SubscriptionState>((set, get) => ({
     await get().fetchSubscriptions();
   },
 
+  applyPlan: async (activate, cancel) => {
+    await apiApplyPlan(activate, cancel);
+    await get().fetchSubscriptions();
+  },
+
   runOptimization: (shows) => {
     const ids = shows.map((s) => s.id);
-    const plan = optimizeSubscriptions(ids, shows);
+    // Honor the user's Profile preferences (budget + subscription count).
+    const { maxMonthlyCost, maxSubscriptions } = usePreferencesStore.getState();
+    const plan = optimizeSubscriptions(ids, shows, {
+      maxPurchases: maxSubscriptions,
+      maxMonthlyCost,
+    });
     // Default the user's selection to the optimal plan; they can edit from there.
     set({ optimizedPlan: plan, selectedPlan: plan, confirmed: false });
   },

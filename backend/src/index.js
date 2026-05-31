@@ -11,7 +11,16 @@ const { connectDB } = require('./config/db');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// In production set ALLOWED_ORIGIN to the frontend URL (comma-separated for
+// multiple). Unset = allow all origins (convenient for local dev).
+const allowedOrigin = process.env.ALLOWED_ORIGIN;
+app.use(
+  cors(
+    allowedOrigin
+      ? { origin: allowedOrigin.split(',').map((o) => o.trim()) }
+      : undefined,
+  ),
+);
 app.use(express.json());
 
 // Routes

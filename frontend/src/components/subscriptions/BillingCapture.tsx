@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useBillingStore } from '../../store/useBillingStore';
+import { useBillingStore, type BillingCycle } from '../../store/useBillingStore';
 import { SERVICES } from '../../lib/mockData';
 import type { BackendSubscription } from '../../lib/api';
 
@@ -13,15 +13,17 @@ export default function BillingCapture({ activeSubscriptions }: BillingCapturePr
   const { entries, setEntry, clearEntry, getDaysUntilRenewal } = useBillingStore();
   const [editing, setEditing] = useState<string | null>(null);
   const [dateInput, setDateInput] = useState('');
+  const [cycleInput, setCycleInput] = useState<BillingCycle>('monthly');
 
   function startEdit(service: string) {
     setEditing(service);
     setDateInput(entries[service]?.renewalDate ?? '');
+    setCycleInput(entries[service]?.cycle ?? 'monthly');
   }
 
   function saveEntry(sub: BackendSubscription) {
     if (!dateInput) return;
-    setEntry(sub.service, dateInput, sub.monthlyCost);
+    setEntry(sub.service, dateInput, sub.monthlyCost, cycleInput);
     setEditing(null);
   }
 
@@ -56,13 +58,21 @@ export default function BillingCapture({ activeSubscriptions }: BillingCapturePr
                   {sub.displayName}
                 </p>
                 {isEditing ? (
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
                     <input
                       type="date"
                       value={dateInput}
                       onChange={(e) => setDateInput(e.target.value)}
                       className="text-xs bg-zinc-800 border border-zinc-700 text-white px-2 py-1 rounded-lg focus:outline-none focus:border-zinc-500"
                     />
+                    <select
+                      value={cycleInput}
+                      onChange={(e) => setCycleInput(e.target.value as BillingCycle)}
+                      className="text-xs bg-zinc-800 border border-zinc-700 text-white px-2 py-1 rounded-lg focus:outline-none focus:border-zinc-500"
+                    >
+                      <option value="monthly">Monthly</option>
+                      <option value="annual">Annual</option>
+                    </select>
                     <button
                       onClick={() => saveEntry(sub)}
                       className="text-xs text-emerald-400 hover:text-emerald-300 font-medium"
@@ -80,7 +90,8 @@ export default function BillingCapture({ activeSubscriptions }: BillingCapturePr
                   <p className="text-xs text-zinc-500 mt-0.5">
                     {entry ? (
                       <span>
-                        Renews {new Date(entry.renewalDate).toLocaleDateString()}{' '}
+                        {entry.cycle === 'annual' ? 'Annual · ends' : 'Renews'}{' '}
+                        {new Date(entry.renewalDate).toLocaleDateString()}{' '}
                         {days !== null && (
                           <span
                             className={

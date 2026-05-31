@@ -11,14 +11,14 @@ interface ShowCardProps {
 }
 
 export default function ShowCard({ show, onClick, selectable = true }: ShowCardProps) {
-  const { selectedShowIds, toggleShow } = useShowStore();
+  const { selectedShowIds, toggleSelected } = useShowStore();
   const isSelected = selectedShowIds.includes(show.id);
 
   function handleClick() {
     if (onClick) {
       onClick();
     } else if (selectable) {
-      toggleShow(show.id);
+      toggleSelected(show.id);
     }
   }
 

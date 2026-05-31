@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Subscription, SERVICE_PRICES, resolveDemoUserId } = require('../models');
+const { executeTool } = require('../mcp/server');
 
 function serializeSubscription(subscription) {
   return {
@@ -85,6 +86,32 @@ router.post('/:userId/cancel', async (req, res) => {
   );
 
   res.json({ success: true, service, status: 'cancelled' });
+});
+
+// POST /api/subscriptions/:userId/apply  { activate: string[], cancel: string[] }
+// Applies a whole plan by running the MCP server's tool functions directly
+// (no LLM in the loop) — deterministic activate/cancel of the given services.
+router.post('/:userId/apply', async (req, res) => {
+  const { activate = [], cancel = [] } = req.body || {};
+  const userId = await resolveDemoUserId(req.params.userId);
+  if (!userId) return res.status(404).json({ error: 'User not found. Run npm run seed first.' });
+
+  const user_id = Number(req.params.userId) || 1;
+  const results = [];
+
+  try {
+    // Cancel first, then activate, so we never momentarily exceed the plan.
+    for (const service of cancel) {
+      results.push(await executeTool('cancel_subscription', { user_id, service }));
+    }
+    for (const service of activate) {
+      results.push(await executeTool('activate_subscription', { user_id, service }));
+    }
+  } catch (err) {
+    return res.status(500).json({ error: 'apply failed', detail: err.message });
+  }
+
+  res.json({ success: true, activated: activate, cancelled: cancel, results });
 });
 
 module.exports = router;

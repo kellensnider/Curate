@@ -1,40 +1,63 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { SERVICES, planFromOptionIds, getOptionById } from '../../lib/mockData';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  SERVICES,
+  planFromOptionIds,
+  getOptionById,
+  type OptimizationResult,
+} from '../../lib/mockData';
 import { useShowStore } from '../../store/useShowStore';
 import { useSubscriptionStore } from '../../store/useSubscriptionStore';
+import { useBillingStore } from '../../store/useBillingStore';
+import { usePreferencesStore } from '../../store/usePreferencesStore';
+import { useScheduleStore } from '../../store/useScheduleStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import PlanBuilder from '../../components/subscriptions/PlanBuilder';
 import CostCalculator from '../../components/subscriptions/CostCalculator';
-import OptimizationSummary from '../../components/subscriptions/OptimizationSummary';
-import WatchBeforeRenewal from '../../components/subscriptions/WatchBeforeRenewal';
-import AgentChat from '../../components/agent/AgentChat';
+import BillingCapture from '../../components/subscriptions/BillingCapture';
 import PipelineProgress, { type PipelineStep } from '../../components/pipeline/PipelineProgress';
 import Navbar from '../../components/navigation/Navbar';
 
+const MONTHS = 6;
+
 export default function DashboardPage() {
   const router = useRouter();
-  const [showAgent, setShowAgent] = useState(false);
+  const { isAuthenticated, userName } = useAuthStore();
 
-  const { watchlist, watchlistLoading, fetchWatchlist, watchlistAsShows } = useShowStore();
+  const { fetchWatchlist, watchlistAsShows } = useShowStore();
   const {
     subscriptions,
     optimizedPlan,
     selectedPlan,
-    loading: subsLoading,
     fetchSubscriptions,
     fetchPrices,
     runOptimization,
     selectPlan,
+    applyPlan,
   } = useSubscriptionStore();
+  const { entries, getMonthsUntilRenewal } = useBillingStore();
+  const { maxMonthlyCost, maxSubscriptions } = usePreferencesStore();
+  const {
+    optionIds: scheduledIds,
+    effectiveDate,
+    setSchedule,
+    clearSchedule,
+  } = useScheduleStore();
 
+  const [auditState, setAuditState] = useState<'idle' | 'running' | 'done'>(
+    optimizedPlan ? 'done' : 'idle',
+  );
+  const [applying, setApplying] = useState(false);
+  const [applied, setApplied] = useState(false);
   const [pipeline, setPipeline] = useState<PipelineStep[]>([
-    { label: 'Load watchlist', status: 'idle' },
-    { label: 'Load subscriptions', status: 'idle' },
+    { label: 'Read watchlist', status: 'idle' },
+    { label: 'Read subscriptions', status: 'idle' },
     { label: 'Analyze coverage', status: 'idle' },
-    { label: 'Compute plan', status: 'idle' },
+    { label: 'Build next-month plan', status: 'idle' },
   ]);
 
   function pipeSet(i: number, status: PipelineStep['status']) {
@@ -42,37 +65,55 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    (async () => {
-      pipeSet(0, 'loading');
-      await fetchWatchlist();
-      pipeSet(0, 'done');
-
-      pipeSet(1, 'loading');
-      await fetchSubscriptions();
-      await fetchPrices();
-      pipeSet(1, 'done');
-
-      pipeSet(2, 'loading');
-      const shows = useShowStore.getState().watchlistAsShows();
-      pipeSet(2, 'done');
-
-      pipeSet(3, 'loading');
-      if (shows.length > 0) runOptimization(shows);
-      pipeSet(3, 'done');
-    })();
+    if (!isAuthenticated) {
+      router.replace('/auth?mode=signin');
+      return;
+    }
+    fetchWatchlist();
+    fetchSubscriptions();
+    fetchPrices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const plan = optimizedPlan;
   const watchlistShows = watchlistAsShows();
   const activeSubs = subscriptions.filter((s) => s.status === 'active');
+  const activeServiceIds = activeSubs.map((s) => s.service);
+  const currentMonthly = activeSubs.reduce((sum, s) => sum + s.monthlyCost, 0);
 
-  const allDone = pipeline.every((s) => s.status === 'done');
-
-  // The user's current (editable) selection — defaults to the optimal plan.
+  // The editable selection (defaults to the recommended plan after an audit).
   const current = selectedPlan ?? optimizedPlan;
   const selectedOptionIds = current?.purchases.map((p) => p.id) ?? [];
 
+  // The scheduled next-month plan (persisted), if any.
+  const scheduledPlan: OptimizationResult | null = useMemo(
+    () =>
+      scheduledIds
+        ? planFromOptionIds(scheduledIds, watchlistShows.map((s) => s.id), watchlistShows)
+        : null,
+    [scheduledIds, watchlistShows],
+  );
+
+  // What the timeline treats as "next month": the schedule wins; otherwise the
+  // current audit selection; otherwise no change from today.
+  const plannedServiceIds = scheduledPlan
+    ? scheduledPlan.requiredServices.map((s) => s.id)
+    : auditState === 'done' && current
+    ? current.requiredServices.map((s) => s.id)
+    : activeServiceIds;
+
+  const isOptimal =
+    !!optimizedPlan &&
+    selectedOptionIds.length === optimizedPlan.purchases.length &&
+    selectedOptionIds.every((id) => optimizedPlan.purchases.some((p) => p.id === id));
+
+  // Does the current selection already match what's scheduled?
+  const selectionMatchesSchedule =
+    !!scheduledIds &&
+    scheduledIds.length === selectedOptionIds.length &&
+    selectedOptionIds.every((id) => scheduledIds.includes(id));
+
   function toggleOption(id: string) {
+    setApplied(false);
     const opt = getOptionById(id);
     let next: string[];
     if (selectedOptionIds.includes(id)) {
@@ -94,134 +135,542 @@ export default function DashboardPage() {
     selectPlan(optimizedPlan);
   }
 
+  async function handleStartAudit() {
+    setApplied(false);
+    setAuditState('running');
+    setPipeline((p) => p.map((s) => ({ ...s, status: 'idle' as const })));
+
+    pipeSet(0, 'loading');
+    await fetchWatchlist();
+    pipeSet(0, 'done');
+
+    pipeSet(1, 'loading');
+    await fetchSubscriptions();
+    pipeSet(1, 'done');
+
+    pipeSet(2, 'loading');
+    await new Promise((r) => setTimeout(r, 450));
+    pipeSet(2, 'done');
+
+    pipeSet(3, 'loading');
+    const shows = useShowStore.getState().watchlistAsShows();
+    if (shows.length > 0) runOptimization(shows);
+    await new Promise((r) => setTimeout(r, 350));
+    pipeSet(3, 'done');
+
+    setAuditState('done');
+  }
+
+  function handleSchedule() {
+    if (selectedOptionIds.length === 0) return;
+    setSchedule(selectedOptionIds);
+  }
+
+  // Services to flip to reach the chosen plan (schedule wins, else current selection).
+  const planServiceIds = (scheduledPlan ?? current)?.requiredServices.map((s) => s.id) ?? [];
+  const toActivate = planServiceIds.filter((id) => !activeServiceIds.includes(id));
+  const toCancel = activeServiceIds.filter((id) => !planServiceIds.includes(id));
+  const hasChanges = toActivate.length > 0 || toCancel.length > 0;
+
+  // Apply the plan now by running the MCP tool functions server-side (no LLM).
+  async function applyNow() {
+    if (!hasChanges) {
+      setApplied(true);
+      return;
+    }
+    setApplying(true);
+    try {
+      await applyPlan(toActivate, toCancel);
+      if (scheduledIds) clearSchedule();
+      setApplied(true);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  // ─── Timeline rows ──────────────────────────────────────────────────────────
+  const months = useMemo(
+    () =>
+      Array.from({ length: MONTHS }, (_, i) => {
+        const d = new Date();
+        d.setMonth(d.getMonth() + i);
+        return i === 0
+          ? 'This month'
+          : d.toLocaleString('default', { month: 'short', year: '2-digit' });
+      }),
+    [],
+  );
+
+  type RowStatus = 'keep' | 'drop' | 'add';
+  const rows = useMemo(() => {
+    const ids = Array.from(
+      new Set([...activeServiceIds, ...plannedServiceIds, ...Object.keys(entries)]),
+    ).filter((id) => activeServiceIds.includes(id) || plannedServiceIds.includes(id));
+
+    return ids
+      .map((id) => {
+        const svc = SERVICES.find((s) => s.id === id);
+        const isActive = activeServiceIds.includes(id);
+        const isPlanned = plannedServiceIds.includes(id);
+        const entry = entries[id];
+        const monthsLeft = getMonthsUntilRenewal(id);
+        const annual = entry?.cycle === 'annual';
+        const lockedCol =
+          annual && isActive && monthsLeft !== null ? Math.min(monthsLeft, MONTHS - 1) : null;
+
+        const status: RowStatus = isActive && isPlanned ? 'keep' : isActive ? 'drop' : 'add';
+
+        let startCol = 0;
+        let endCol = MONTHS - 1;
+        if (status === 'add') startCol = 1;
+        if (status === 'drop') endCol = lockedCol ?? 0;
+
+        const covered = watchlistShows.filter((s) => s.streamingServices.includes(id));
+
+        return { id, svc, status, startCol, endCol, annual, monthsLeft, lockedCol, entry, covered };
+      })
+      .sort((a, b) => {
+        const order = { drop: 0, keep: 1, add: 2 };
+        return order[a.status] - order[b.status];
+      });
+  }, [activeServiceIds, plannedServiceIds, entries, watchlistShows, getMonthsUntilRenewal]);
+
+  const annualRows = rows.filter((r) => r.annual && r.monthsLeft !== null);
+
   return (
     <div className="min-h-screen bg-zinc-950">
       <Navbar />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-        {/* Pipeline progress */}
-        <div className="mb-6">
-          <PipelineProgress steps={pipeline} />
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
+          <h1 className="text-3xl font-black text-white">
+            {userName ? `Hi ${userName.split(' ')[0]} — ` : ''}Dashboard
+          </h1>
+          <p className="text-zinc-400 text-sm mt-1">
+            Audit your plan, schedule next month, or apply changes now.
+          </p>
+        </motion.div>
+
+        {/* This-month summary */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          <SummaryStat label="Active services" value={activeSubs.length.toString()} />
+          <SummaryStat label="Monthly spend" value={`$${currentMonthly.toFixed(2)}`} />
+          <SummaryStat label="Shows in list" value={watchlistShows.length.toString()} />
+          <SummaryStat
+            label="Budget cap"
+            value={`$${maxMonthlyCost} · ${maxSubscriptions} max`}
+            small
+          />
         </div>
 
-        {/* Optimization banner */}
-        {plan && allDone && (
-          <motion.div
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6"
+        {/* Set up current subscriptions prompt */}
+        {activeSubs.length === 0 && (
+          <Link
+            href="/subscriptions"
+            className="flex items-center justify-between gap-3 mb-8 p-4 bg-zinc-900 border border-zinc-800 rounded-2xl hover:border-zinc-700 transition"
           >
-            <OptimizationSummary result={plan} showCount={watchlistShows.length} />
-          </motion.div>
+            <div>
+              <p className="text-white font-semibold text-sm">Add your current subscriptions</p>
+              <p className="text-zinc-500 text-xs mt-0.5">
+                Tell Curate what you already pay for and how long each lasts.
+              </p>
+            </div>
+            <span className="text-zinc-400 text-sm shrink-0">Set up →</span>
+          </Link>
         )}
 
-        {/* No watchlist state */}
-        {allDone && watchlistShows.length === 0 && (
-          <div className="mb-6 p-5 bg-zinc-900 border border-zinc-800 rounded-2xl text-center">
-            <p className="text-zinc-400 text-sm mb-3">
-              Your watchlist is empty — add shows to get an optimized plan.
-            </p>
-            <button
-              onClick={() => router.push('/browse')}
-              className="bg-white text-black font-semibold px-5 py-2.5 rounded-xl text-sm hover:bg-zinc-100 transition"
+        {/* Scheduled banner */}
+        <AnimatePresence>
+          {scheduledPlan && effectiveDate && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="mb-6 p-4 bg-blue-950/30 border border-blue-900/50 rounded-2xl flex flex-wrap items-center justify-between gap-3"
             >
-              Browse Shows →
+              <div className="flex items-center gap-3 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />
+                <p className="text-sm text-blue-100 min-w-0">
+                  <span className="font-semibold">Scheduled for next month</span> ·{' '}
+                  {scheduledPlan.purchases.map((p) => p.name).join(' + ') || 'no services'} · takes
+                  effect {new Date(effectiveDate).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={applyNow}
+                  disabled={applying}
+                  className="text-xs font-semibold text-blue-300 hover:text-blue-200 disabled:opacity-50"
+                >
+                  {applying ? 'Applying…' : 'Apply now'}
+                </button>
+                <button
+                  onClick={clearSchedule}
+                  className="text-xs text-zinc-500 hover:text-red-400 transition-colors"
+                >
+                  Cancel schedule
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ─── Audit ─────────────────────────────────────────────────────── */}
+        <section className="mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold text-white">Monthly Audit</h2>
+            <button
+              onClick={handleStartAudit}
+              disabled={auditState === 'running' || watchlistShows.length === 0}
+              className="bg-white text-black font-bold text-sm px-5 py-2.5 rounded-xl hover:bg-zinc-200 active:scale-95 disabled:opacity-40 transition-all"
+            >
+              {auditState === 'running'
+                ? 'Auditing…'
+                : auditState === 'done'
+                ? 'Re-run Audit'
+                : 'Start New Audit'}
             </button>
           </div>
-        )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Interactive plan builder */}
-          <div className="lg:col-span-2 space-y-4">
-            {plan && current ? (
-              <PlanBuilder
-                watchlistShows={watchlistShows}
-                recommended={plan}
-                custom={current}
-                selectedIds={selectedOptionIds}
-                onToggle={toggleOption}
-                onUseRecommended={useRecommended}
-              />
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {SERVICES.map((s) => (
-                  <div key={s.id} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 animate-pulse h-28" />
+          {watchlistShows.length === 0 && (
+            <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-2xl text-center">
+              <p className="text-zinc-400 text-sm mb-3">
+                Add shows to your list, then run an audit to get next month&apos;s plan.
+              </p>
+              <button
+                onClick={() => router.push('/browse')}
+                className="bg-white text-black font-semibold px-5 py-2.5 rounded-xl text-sm hover:bg-zinc-100 transition"
+              >
+                Browse Shows →
+              </button>
+            </div>
+          )}
+
+          {auditState !== 'idle' && watchlistShows.length > 0 && (
+            <div className="mb-5">
+              <PipelineProgress steps={pipeline} />
+            </div>
+          )}
+
+          {/* Audit result: interactive builder + cost sidebar */}
+          <AnimatePresence>
+            {auditState === 'done' && optimizedPlan && current && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="grid grid-cols-1 lg:grid-cols-3 gap-6"
+              >
+                <div className="lg:col-span-2">
+                  <PlanBuilder
+                    watchlistShows={watchlistShows}
+                    recommended={optimizedPlan}
+                    custom={current}
+                    selectedIds={selectedOptionIds}
+                    onToggle={toggleOption}
+                    onUseRecommended={useRecommended}
+                  />
+                </div>
+
+                <div className="lg:col-span-1 space-y-3">
+                  <CostCalculator result={current} />
+
+                  {/* Schedule (non-destructive) */}
+                  {selectionMatchesSchedule && effectiveDate ? (
+                    <div className="w-full bg-emerald-950/40 border border-emerald-900/50 rounded-xl p-4 text-center">
+                      <p className="text-emerald-300 text-sm font-bold flex items-center justify-center gap-1.5">
+                        <svg width="14" height="11" viewBox="0 0 14 11" fill="none">
+                          <path d="M1 5.5L5 9.5L13 1.5" stroke="#4ade80" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        Scheduled for next month
+                      </p>
+                      <p className="text-emerald-700 text-xs mt-1">
+                        Takes effect {new Date(effectiveDate).toLocaleDateString()}
+                      </p>
+                      <button
+                        onClick={clearSchedule}
+                        className="text-xs text-zinc-500 hover:text-red-400 transition-colors mt-2"
+                      >
+                        Cancel schedule
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <button
+                        onClick={handleSchedule}
+                        disabled={selectedOptionIds.length === 0}
+                        className="w-full bg-white text-black font-bold py-3.5 rounded-xl hover:bg-zinc-100 active:scale-[0.99] disabled:opacity-40 transition-all text-sm"
+                      >
+                        {scheduledIds ? 'Update schedule for next month' : 'Schedule for next month'}
+                      </button>
+                      <p className="text-xs text-zinc-500 text-center px-2">
+                        Scheduling doesn&apos;t change anything today — it takes effect on the 1st.
+                        {isOptimal ? '' : ' You picked a custom plan.'}
+                      </p>
+                    </>
+                  )}
+
+                  {/* Apply now — runs the MCP tool functions directly (no chat) */}
+                  <div className="pt-1">
+                    {applied && !hasChanges ? (
+                      <p className="w-full flex items-center justify-center gap-1.5 text-sm text-emerald-400 font-semibold py-2">
+                        <svg width="14" height="11" viewBox="0 0 14 11" fill="none">
+                          <path d="M1 5.5L5 9.5L13 1.5" stroke="#4ade80" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        Subscriptions updated
+                      </p>
+                    ) : (
+                      <>
+                        <button
+                          onClick={applyNow}
+                          disabled={applying || !hasChanges}
+                          className="w-full bg-emerald-500 text-white font-bold py-3 rounded-xl hover:bg-emerald-400 active:scale-[0.99] disabled:opacity-40 transition-all text-sm"
+                        >
+                          {applying ? 'Applying…' : hasChanges ? 'Apply now' : 'No changes to apply'}
+                        </button>
+                        {hasChanges && (
+                          <p className="text-xs text-zinc-500 text-center px-2 mt-2">
+                            Runs immediately:{' '}
+                            {toActivate.length > 0 && (
+                              <span className="text-emerald-400">
+                                +{toActivate.map((id) => SERVICES.find((s) => s.id === id)?.name ?? id).join(', ')}
+                              </span>
+                            )}
+                            {toActivate.length > 0 && toCancel.length > 0 && ' · '}
+                            {toCancel.length > 0 && (
+                              <span className="text-red-400">
+                                −{toCancel.map((id) => SERVICES.find((s) => s.id === id)?.name ?? id).join(', ')}
+                              </span>
+                            )}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
+
+        {/* ─── Timeline ──────────────────────────────────────────────────── */}
+        <section>
+          <div className="flex items-center justify-between mb-1">
+            <h2 className="text-lg font-bold text-white">Timeline</h2>
+            <Link href="/subscriptions" className="text-xs text-zinc-500 hover:text-zinc-300">
+              Edit current subscriptions →
+            </Link>
+          </div>
+          <p className="text-zinc-400 text-sm mb-4">
+            How long your subscriptions run, and what changes next month.
+          </p>
+
+          {rows.length === 0 ? (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-8 text-center text-zinc-500 text-sm">
+              No subscriptions to show yet. Run an audit, or{' '}
+              <Link href="/subscriptions" className="text-zinc-300 underline">
+                add your current ones
+              </Link>
+              .
+            </div>
+          ) : (
+            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">
+              {/* Month header */}
+              <div className="flex border-b border-zinc-800">
+                <div className="w-28 sm:w-36 shrink-0 px-3 py-2.5 text-xs text-zinc-500 font-medium">
+                  Service
+                </div>
+                {months.map((m, i) => (
+                  <div
+                    key={m}
+                    className={`flex-1 text-center text-xs py-2.5 border-l border-zinc-800/60 ${
+                      i === 0 ? 'text-zinc-300 font-semibold' : 'text-zinc-600'
+                    }`}
+                  >
+                    {m}
+                  </div>
                 ))}
               </div>
-            )}
 
-            {/* Watch before renewal */}
-            <WatchBeforeRenewal />
+              {/* Rows */}
+              {rows.map((row, rowIdx) => (
+                <div
+                  key={row.id}
+                  className={`flex border-b border-zinc-800/40 ${rowIdx % 2 ? 'bg-zinc-900/50' : ''}`}
+                >
+                  <div className="w-28 sm:w-36 shrink-0 px-3 py-3 flex items-center gap-2">
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: row.svc?.brandColor ?? '#555' }}
+                    />
+                    <span className="text-xs text-white font-semibold truncate">
+                      {row.svc?.name ?? row.id}
+                    </span>
+                  </div>
 
-            {/* Agent Chat */}
-            <div>
-              <button
-                onClick={() => setShowAgent((v) => !v)}
-                className="flex items-center gap-2 text-sm text-zinc-400 hover:text-white transition-colors mb-3"
-              >
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                {showAgent ? 'Hide' : 'Open'} Curate AI
-              </button>
-              {showAgent && <AgentChat />}
-            </div>
-          </div>
-
-          {/* Right sidebar */}
-          <div className="lg:col-span-1 space-y-4">
-            {current ? (
-              <CostCalculator result={current} />
-            ) : (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 animate-pulse h-52" />
-            )}
-
-            <button
-              onClick={() => router.push('/confirm')}
-              disabled={!plan}
-              className="w-full bg-white text-black font-bold py-3.5 rounded-xl hover:bg-zinc-100 active:scale-95 disabled:opacity-40 transition-all text-sm"
-            >
-              Confirm My Plan →
-            </button>
-
-            <button
-              onClick={() => router.push('/audit')}
-              className="w-full bg-zinc-800 text-zinc-300 font-medium py-3 rounded-xl hover:bg-zinc-700 transition text-sm"
-            >
-              Full Audit Wizard →
-            </button>
-
-            <button
-              onClick={() => router.push('/')}
-              className="w-full text-zinc-600 text-sm py-2 hover:text-zinc-400 transition-colors"
-            >
-              ← Change my shows
-            </button>
-
-            {/* Current subscription costs */}
-            {activeSubs.length > 0 && (
-              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-                <p className="text-xs text-zinc-500 uppercase tracking-wider font-semibold mb-3">
-                  Current Spend
-                </p>
-                {activeSubs.map((sub) => {
-                  const svc = SERVICES.find((s) => s.id === sub.service);
-                  return (
-                    <div key={sub.service} className="flex justify-between py-1">
-                      <span className="text-xs text-zinc-400">{sub.displayName}</span>
-                      <span className="text-xs text-zinc-300">${sub.monthlyCost.toFixed(2)}</span>
-                    </div>
-                  );
-                })}
-                <div className="border-t border-zinc-800 mt-2 pt-2 flex justify-between">
-                  <span className="text-xs text-zinc-400">Total</span>
-                  <span className="text-xs text-white font-bold">
-                    ${activeSubs.reduce((s, sub) => s + sub.monthlyCost, 0).toFixed(2)}/mo
-                  </span>
+                  {months.map((_, colIdx) => {
+                    const inBar = colIdx >= row.startCol && colIdx <= row.endCol;
+                    const isStart = colIdx === row.startCol;
+                    const isEnd = colIdx === row.endCol;
+                    const color = row.svc?.brandColor ?? '#666';
+                    const renewalHere = row.annual && row.monthsLeft === colIdx;
+                    return (
+                      <div
+                        key={colIdx}
+                        className="flex-1 relative border-l border-zinc-800/40 py-3.5 flex items-center justify-center"
+                      >
+                        {inBar && (
+                          <div
+                            className="absolute h-1.5"
+                            style={{
+                              backgroundColor: color,
+                              opacity: row.status === 'add' ? 0.55 : 0.32,
+                              left: isStart ? '20%' : 0,
+                              right: isEnd ? '20%' : 0,
+                              borderRadius: isStart || isEnd ? 9999 : 0,
+                            }}
+                          />
+                        )}
+                        {row.status === 'drop' && isEnd && (
+                          <div className="w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-zinc-950 z-10" />
+                        )}
+                        {row.status === 'add' && isStart && (
+                          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-zinc-950 z-10" />
+                        )}
+                        {renewalHere && (
+                          <div
+                            className="w-3 h-3 rounded-full border-2 border-zinc-950 z-10"
+                            style={{ backgroundColor: color }}
+                            title={`Renews ${row.entry?.renewalDate}`}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+              ))}
+
+              {/* Legend */}
+              <div className="px-4 py-3 flex flex-wrap items-center gap-4 text-xs text-zinc-600">
+                <span className="flex items-center gap-1.5">
+                  <div className="w-3 h-1.5 rounded bg-zinc-500 opacity-50" /> Active
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" /> Starts next month
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <div className="w-2.5 h-2.5 rounded-full bg-red-500" /> Cancels
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-zinc-400" /> Annual renewal
+                </span>
               </div>
-            )}
+            </div>
+          )}
+
+          {/* Annual subscriptions with time left */}
+          {annualRows.length > 0 && (
+            <div className="mt-5">
+              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider mb-3">
+                Annual subscriptions
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {annualRows.map((row) => (
+                  <div
+                    key={row.id}
+                    className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between"
+                  >
+                    <div>
+                      <p className="text-sm font-bold" style={{ color: row.svc?.brandColor }}>
+                        {row.svc?.name ?? row.id}
+                      </p>
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Paid through{' '}
+                        {row.entry ? new Date(row.entry.renewalDate).toLocaleDateString() : '—'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-black text-white">{row.monthsLeft}</p>
+                      <p className="text-xs text-zinc-500">months left</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Watch-before lists */}
+          {rows.filter((r) => (r.status === 'drop' || r.annual) && r.covered.length > 0).length > 0 && (
+            <div className="mt-5 space-y-3">
+              <h3 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                Watch before they expire
+              </h3>
+              {rows
+                .filter((r) => (r.status === 'drop' || r.annual) && r.covered.length > 0)
+                .map((row) => (
+                  <div key={row.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-sm font-bold" style={{ color: row.svc?.brandColor }}>
+                        {row.svc?.name}
+                      </span>
+                      <span className="text-xs text-zinc-500">
+                        {row.annual && row.monthsLeft !== null
+                          ? `${row.monthsLeft}mo left`
+                          : 'Cancelling next month'}
+                      </span>
+                    </div>
+                    <div className="flex gap-2 flex-wrap">
+                      {row.covered.slice(0, 10).map((show) => (
+                        <div
+                          key={show.id}
+                          className="rounded-lg overflow-hidden"
+                          style={{ width: 42, height: 63 }}
+                          title={show.title}
+                        >
+                          <img
+                            src={show.posterUrl}
+                            alt={show.title}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ))}
+                      {row.covered.length > 10 && (
+                        <div
+                          className="rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs"
+                          style={{ width: 42, height: 63 }}
+                        >
+                          +{row.covered.length - 10}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+
+          {/* Billing cadence editor */}
+          <div className="mt-5">
+            <BillingCapture activeSubscriptions={activeSubs} />
           </div>
-        </div>
+        </section>
       </div>
+    </div>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  small,
+}: {
+  label: string;
+  value: string;
+  small?: boolean;
+}) {
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+      <p className={`font-black text-white ${small ? 'text-base' : 'text-2xl'}`}>{value}</p>
+      <p className="text-zinc-500 text-xs mt-1">{label}</p>
     </div>
   );
 }

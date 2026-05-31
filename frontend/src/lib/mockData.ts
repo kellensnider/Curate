@@ -129,6 +129,12 @@ export interface OptimizeOptions {
    * single purchase even though it grants several services.
    */
   maxPurchases?: number;
+  /**
+   * Hard ceiling on the plan's monthly cost. Plans above this are excluded
+   * (unless nothing fits, in which case the single cheapest option wins so the
+   * user is never left with an empty plan).
+   */
+  maxMonthlyCost?: number;
 }
 
 // Enumerate every combination of `items` with size 1..max.
@@ -158,7 +164,7 @@ export function optimizeSubscriptions(
   pool: Show[] = SHOWS,
   options: OptimizeOptions = {}
 ): OptimizationResult {
-  const { maxPurchases = 2 } = options;
+  const { maxPurchases = 2, maxMonthlyCost = Infinity } = options;
 
   if (selectedShowIds.length === 0) {
     return {
@@ -197,6 +203,8 @@ export function optimizeSubscriptions(
 
   for (const combo of combinations(PLAN_OPTIONS, maxPurchases)) {
     const { weight, cost } = scorePlan(combo);
+    // Respect the user's monthly budget — never recommend a plan over it.
+    if (cost > maxMonthlyCost) continue;
     // Skip plans containing an option that adds no coverage (pure dead weight).
     if (combo.length > 1) {
       const redundant = combo.some(
@@ -208,6 +216,15 @@ export function optimizeSubscriptions(
       best = combo;
       bestScore = { weight, cost };
     }
+  }
+
+  // If the budget is so tight nothing qualified, fall back to the single
+  // cheapest option that still covers something, so the plan is never empty.
+  if (best.length === 0) {
+    const fallback = PLAN_OPTIONS
+      .filter((o) => scorePlan([o]).weight > 0)
+      .sort((a, b) => a.monthlyPrice - b.monthlyPrice)[0];
+    if (fallback) best = [fallback];
   }
 
   const granted = new Set(best.flatMap((o) => o.services));

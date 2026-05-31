@@ -8,9 +8,8 @@ const NAV_LINKS = [
   { href: '/', label: 'Home' },
   { href: '/browse', label: 'Browse' },
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/audit', label: 'Audit' },
-  { href: '/timeline', label: 'Timeline' },
-  { href: '/profile', label: 'My List' },
+  { href: '/my-list', label: 'My List' },
+  { href: '/profile', label: 'Profile' },
 ];
 
 export default function Navbar() {
@@ -20,7 +19,7 @@ export default function Navbar() {
 
   function handleSignOut() {
     signOut();
-    router.push('/auth');
+    router.push('/');
   }
 
   return (
@@ -30,30 +29,30 @@ export default function Navbar() {
           curate
         </Link>
 
-        {/* Nav links — hidden on small screens */}
-        <div className="hidden md:flex items-center gap-0.5 flex-1">
-          {NAV_LINKS.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                pathname === link.href
-                  ? 'bg-zinc-800 text-white'
-                  : 'text-zinc-500 hover:text-white hover:bg-zinc-800/60'
-              }`}
-            >
-              {link.label}
-            </Link>
-          ))}
-        </div>
+        {/* Nav links — only when signed in */}
+        {isAuthenticated && (
+          <div className="hidden md:flex items-center gap-0.5 flex-1">
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  pathname === link.href
+                    ? 'bg-zinc-800 text-white'
+                    : 'text-zinc-500 hover:text-white hover:bg-zinc-800/60'
+                }`}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* Auth */}
         <div className="ml-auto flex items-center gap-3 shrink-0">
           {isAuthenticated ? (
             <>
-              <span className="text-xs text-zinc-500 hidden sm:block">
-                {userName}
-              </span>
+              <span className="text-xs text-zinc-500 hidden sm:block">{userName}</span>
               <button
                 onClick={handleSignOut}
                 className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
@@ -62,12 +61,20 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            <Link
-              href="/auth"
-              className="text-xs bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-3 py-1.5 rounded-lg font-medium transition-colors"
-            >
-              Sign in
-            </Link>
+            <>
+              <Link
+                href="/auth?mode=signin"
+                className="text-xs text-zinc-300 hover:text-white px-3 py-1.5 rounded-lg font-medium transition-colors"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/auth?mode=signup"
+                className="text-xs bg-white hover:bg-zinc-200 text-black px-3 py-1.5 rounded-lg font-bold transition-colors"
+              >
+                Sign up
+              </Link>
+            </>
           )}
         </div>
       </div>

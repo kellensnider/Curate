@@ -1,138 +1,155 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ALL_GENRES, optimizeSubscriptions } from '../lib/mockData';
-import { useShowStore } from '../store/useShowStore';
-import { useSubscriptionStore } from '../store/useSubscriptionStore';
-import ShowGrid from '../components/shows/ShowGrid';
-import GenreFilter from '../components/onboarding/GenreFilter';
-import Navbar from '../components/navigation/Navbar';
+import { motion } from 'framer-motion';
+import { SHOWS, ALL_SERVICES_TOTAL } from '../lib/mockData';
+import { useAuthStore } from '../store/useAuthStore';
 
-export default function OnboardingPage() {
+const STATS = [
+  { value: '$61', label: 'Average household streaming bill / month' },
+  { value: '$219', label: 'Wasted per year on services you barely watch' },
+  { value: '47%', label: 'Of subscribers pay for content they never open' },
+  { value: '8', label: 'Streaming services the average viewer juggles' },
+];
+
+export default function HomePage() {
   const router = useRouter();
-  const [activeGenre, setActiveGenre] = useState('All');
-  const [buildingPlan, setBuildingPlan] = useState(false);
+  const { isAuthenticated } = useAuthStore();
 
-  const {
-    browseShows,
-    browseLoading,
-    browseError,
-    selectedShowIds,
-    fetchPopular,
-    toggleSelected,
-    bulkAddSelectedToWatchlist,
-    watchlistAsShows,
-  } = useShowStore();
-
-  const { runOptimization } = useSubscriptionStore();
-
+  // Signed-in users don't need the marketing page — send them to the dashboard.
   useEffect(() => {
-    fetchPopular();
+    if (isAuthenticated) router.replace('/dashboard');
+  }, [isAuthenticated, router]);
+
+  // A poster wall built from the local catalog — no backend needed for the
+  // landing page so it always renders, even before sign-in.
+  const posters = useMemo(() => {
+    const withPosters = SHOWS.filter((s) => s.posterUrl);
+    return withPosters.slice(0, 56);
   }, []);
 
-  const filteredShows = useMemo(() => {
-    if (activeGenre === 'All') return browseShows;
-    return browseShows.filter((show) =>
-      show.genres.some((g) => g.toLowerCase() === activeGenre.toLowerCase()),
-    );
-  }, [browseShows, activeGenre]);
-
-  const estimatedCost = useMemo(() => {
-    if (selectedShowIds.length === 0) return 0;
-    const selShows = browseShows.filter((s) => selectedShowIds.includes(s.id));
-    return optimizeSubscriptions(selectedShowIds, selShows).monthlyTotal;
-  }, [selectedShowIds, browseShows]);
-
-  async function handleBuildPlan() {
-    setBuildingPlan(true);
-    await bulkAddSelectedToWatchlist();
-    const shows = useShowStore.getState().watchlistAsShows();
-    runOptimization(shows);
-    router.push('/dashboard');
-  }
+  if (isAuthenticated) return null;
 
   return (
-    <div className="min-h-screen bg-zinc-950">
-      <Navbar />
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-16 pb-8">
-        {/* Hero */}
-        <motion.div
-          initial={{ opacity: 0, y: 24 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-center mb-10"
-        >
-          <h1 className="text-5xl sm:text-6xl font-black text-white tracking-tight leading-none">
-            What do you<br />want to watch?
-          </h1>
-          <p className="text-zinc-400 text-lg mt-4 font-medium">
-            Tell us your shows. We&apos;ll handle the subscriptions.
-          </p>
-        </motion.div>
-
-        {/* Genre filter */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="mb-6"
-        >
-          <GenreFilter genres={ALL_GENRES} active={activeGenre} onChange={setActiveGenre} />
-        </motion.div>
-
-        {/* Error state */}
-        {browseError && (
-          <div className="mb-4 p-3 bg-red-950/50 border border-red-900/50 rounded-xl text-red-400 text-sm text-center">
-            {browseError} — make sure the backend is running on port 3001.
-          </div>
-        )}
-
-        {/* Shows grid */}
-        <div className="pb-36">
-          <ShowGrid
-            shows={filteredShows}
-            loading={browseLoading}
-            emptyMessage={activeGenre !== 'All' ? `No ${activeGenre} shows found` : 'No shows found'}
-          />
+    <div className="relative min-h-screen overflow-hidden bg-zinc-950">
+      {/* Poster wall background */}
+      <div className="absolute inset-0">
+        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-1.5 p-1.5 opacity-40">
+          {posters.map((show) => (
+            <div key={show.id} className="rounded-md overflow-hidden" style={{ aspectRatio: '2/3' }}>
+              <img
+                src={show.posterUrl}
+                alt=""
+                className="w-full h-full object-cover"
+                loading="lazy"
+              />
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Floating bottom bar */}
-      <AnimatePresence>
-        {selectedShowIds.length > 0 && (
-          <motion.div
-            initial={{ y: 120, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 120, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 220, damping: 28 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[calc(100%-2rem)] max-w-md"
+      {/* Gradient scrim for legibility */}
+      <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/70 via-zinc-950/85 to-zinc-950" />
+      <div className="absolute inset-0 bg-gradient-to-r from-zinc-950/80 via-transparent to-zinc-950/80" />
+
+      {/* Top bar */}
+      <header className="relative z-10 max-w-7xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
+        <span className="text-white font-black text-2xl tracking-tight">curate</span>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/auth?mode=signin"
+            className="text-sm text-zinc-200 hover:text-white px-4 py-2 rounded-lg font-medium transition-colors"
           >
-            <div className="bg-zinc-900/95 backdrop-blur-md border border-zinc-700 rounded-2xl px-5 py-4 flex items-center justify-between gap-4 shadow-2xl shadow-black/50">
-              <div>
-                <p className="text-white font-semibold text-sm">
-                  {selectedShowIds.length} show{selectedShowIds.length !== 1 ? 's' : ''} selected
-                </p>
-                <p className="text-zinc-400 text-xs mt-0.5">
-                  Estimated:{' '}
-                  <span className="text-emerald-400 font-semibold">
-                    ${estimatedCost.toFixed(2)}/month
-                  </span>
-                </p>
-              </div>
-              <button
-                onClick={handleBuildPlan}
-                disabled={buildingPlan}
-                className="shrink-0 bg-white text-black text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-zinc-100 active:scale-95 disabled:opacity-60 transition-all"
-              >
-                {buildingPlan ? 'Saving…' : 'Build My Plan →'}
-              </button>
+            Log in
+          </Link>
+          <Link
+            href="/auth?mode=signup"
+            className="text-sm bg-white hover:bg-zinc-200 text-black px-4 py-2 rounded-lg font-bold transition-colors"
+          >
+            Sign up
+          </Link>
+        </div>
+      </header>
+
+      {/* Hero */}
+      <main className="relative z-10 max-w-4xl mx-auto px-5 sm:px-8 pt-16 sm:pt-24 pb-20 text-center">
+        <motion.h1
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="text-4xl sm:text-6xl font-black text-white tracking-tight leading-[1.05]"
+        >
+          Every show you want.
+          <br />
+          Without paying for all of them.
+        </motion.h1>
+
+        <motion.p
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.5 }}
+          className="text-zinc-300 text-lg sm:text-xl mt-6 max-w-2xl mx-auto font-medium"
+        >
+          Curate builds your watchlist a month at a time — keeping only the one or
+          two streaming services that cover what you actually watch, and canceling
+          the rest.
+        </motion.p>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.5 }}
+          className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-9"
+        >
+          <Link
+            href="/auth?mode=signup"
+            className="w-full sm:w-auto bg-white text-black font-bold text-base px-8 py-3.5 rounded-xl hover:bg-zinc-200 active:scale-95 transition-all"
+          >
+            Get started — it's free
+          </Link>
+          <Link
+            href="/auth?mode=signin"
+            className="w-full sm:w-auto bg-zinc-800/80 backdrop-blur text-white font-semibold text-base px-8 py-3.5 rounded-xl hover:bg-zinc-700 active:scale-95 transition-all"
+          >
+            Log in
+          </Link>
+        </motion.div>
+
+        {/* Big stats */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45, duration: 0.6 }}
+          className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-20"
+        >
+          {STATS.map((stat) => (
+            <div
+              key={stat.label}
+              className="bg-zinc-900/50 backdrop-blur border border-zinc-800 rounded-2xl p-5 text-left"
+            >
+              <p className="text-4xl sm:text-5xl font-black text-white tracking-tight">
+                {stat.value}
+              </p>
+              <p className="text-zinc-400 text-xs sm:text-sm mt-2 leading-snug">{stat.label}</p>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          ))}
+        </motion.div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7 }}
+          className="text-zinc-500 text-sm mt-10"
+        >
+          Subscribing to everything costs{' '}
+          <span className="text-zinc-300 font-semibold">
+            ${ALL_SERVICES_TOTAL.toFixed(2)}/mo
+          </span>
+          . Most people need a fraction of that.
+        </motion.p>
+      </main>
     </div>
   );
 }

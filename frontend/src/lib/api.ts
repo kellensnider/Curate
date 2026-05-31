@@ -136,6 +136,13 @@ export const cancelService = (service: string) =>
     { method: 'POST', body: JSON.stringify({ service }) },
   );
 
+/** Apply a whole plan at once — runs the MCP tool functions server-side. */
+export const applyPlan = (activate: string[], cancel: string[]) =>
+  req<{ success: boolean; activated: string[]; cancelled: string[] }>(
+    `/api/subscriptions/${USER_ID}/apply`,
+    { method: 'POST', body: JSON.stringify({ activate, cancel }) },
+  );
+
 // ─── Agent (SSE streaming) ────────────────────────────────────────────────────
 
 export async function* streamAgentChat(

@@ -4,9 +4,13 @@
   "description": "Curate backend - Express + MongoDB + Claude Agent",
   "main": "src/index.js",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "dev": "node --watch src/index.js",
     "start": "node src/index.js",
+    "mcp": "node src/mcp/stdio-server.js",
     "seed": "node src/seed/seedDemoData.js",
     "ingest:justwatch": "cd ingest && python justwatch_ingest.py --count 250 --include-curated",
     "import:justwatch": "node src/seed/importJustWatchData.js",

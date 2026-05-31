@@ -1,16 +1,27 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../store/useAuthStore';
 
 type Tab = 'signin' | 'signup';
 
 export default function AuthPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-zinc-950" />}>
+      <AuthForm />
+    </Suspense>
+  );
+}
+
+function AuthForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { signIn } = useAuthStore();
-  const [tab, setTab] = useState<Tab>('signin');
+  const [tab, setTab] = useState<Tab>(
+    searchParams.get('mode') === 'signup' ? 'signup' : 'signin',
+  );
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,7 +34,7 @@ export default function AuthPage() {
     // Simulate network delay for realism
     await new Promise((r) => setTimeout(r, 600));
     signIn(email, tab === 'signup' ? name : undefined);
-    router.push('/');
+    router.push('/dashboard');
   }
 
   return (

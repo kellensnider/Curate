@@ -10,7 +10,14 @@ interface Message {
   toolCalls?: string[];
 }
 
-export default function AgentChat() {
+interface AgentChatProps {
+  /** When set to a new value, the chat auto-sends this message once. */
+  autoMessage?: string;
+  /** Called when the agent activates/cancels a subscription (so callers can refetch). */
+  onSubscriptionsChanged?: () => void;
+}
+
+export default function AgentChat({ autoMessage, onSubscriptionsChanged }: AgentChatProps = {}) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,6 +51,14 @@ export default function AgentChat() {
         } else if (event.type === 'tool_call' && event.name) {
           usedTools.push(event.name);
           setActiveTools([...usedTools]);
+        } else if (event.type === 'tool_result' && event.name) {
+          // The agent actually changed subscription state — let the page refresh.
+          if (
+            event.name === 'activate_subscription' ||
+            event.name === 'cancel_subscription'
+          ) {
+            onSubscriptionsChanged?.();
+          }
         } else if (event.type === 'done') {
           if (event.history) setConversationHistory(event.history as unknown[]);
           setMessages((prev) => [
@@ -60,7 +75,16 @@ export default function AgentChat() {
     } finally {
       setLoading(false);
     }
-  }, [loading, conversationHistory]);
+  }, [loading, conversationHistory, onSubscriptionsChanged]);
+
+  // Auto-send an "apply now" instruction when the caller provides one.
+  const lastAutoRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (autoMessage && autoMessage !== lastAutoRef.current) {
+      lastAutoRef.current = autoMessage;
+      sendMessage(autoMessage);
+    }
+  }, [autoMessage, sendMessage]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
