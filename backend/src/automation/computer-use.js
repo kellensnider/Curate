@@ -227,12 +227,17 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
       : ws + (ws.includes('?') ? '&' : '?') + `timeout=${ms}`;
 
     // Run Browserless headless (no GUI render → faster screenshots/steps) unless
-    // BROWSER_HEADLESS=false. Replace an explicit headless=false, else append.
-    // An unrecognized flag is ignored by Browserless, so this is safe.
+    // BROWSER_HEADLESS=false. Browserless v2 takes launch options as a `launch`
+    // JSON query param (the v1 `headless=` flag is ignored). Force "headless":true
+    // inside an existing launch param, else append a fresh one.
     if (process.env.BROWSER_HEADLESS !== 'false') {
-      ws = /[?&]headless=(true|false)/i.test(ws)
-        ? ws.replace(/([?&]headless=)(?:true|false)/i, '$1true')
-        : ws + (ws.includes('?') ? '&' : '?') + 'headless=true';
+      if (/[?&]launch=/i.test(ws)) {
+        ws = ws
+          .replace(/("headless"\s*:\s*)false/gi, '$1true')
+          .replace(/(%22headless%22%3A)false/gi, '$1true');
+      } else {
+        ws += (ws.includes('?') ? '&' : '?') + 'launch=' + encodeURIComponent('{"headless":true}');
+      }
     }
   }
   const headless = process.env.AUTOMATION_HEADLESS !== 'false';
