@@ -56,6 +56,25 @@ function loadChromium() {
   return null;
 }
 
+// Map technical errors to a clean message for the demo UI. The raw detail is
+// still written to the run's step log for debugging.
+function friendlyError(message) {
+  const m = String(message || '');
+  if (/captcha|verify you are human|are you a robot/i.test(m)) {
+    return 'The site asked for human verification (CAPTCHA). Try again, or use a different email.';
+  }
+  if (/closed|disconnected|Target page|Target closed|session/i.test(m)) {
+    return 'The browser session ended early. Please try again.';
+  }
+  if (/Chromium|Playwright|connect|ECONN|browser/i.test(m)) {
+    return 'Could not reach the browser. Please try again.';
+  }
+  if (/Gemini \d+|inline_data|function response|quota|RESOURCE_EXHAUSTED|api key|permission/i.test(m)) {
+    return 'The AI agent hit a temporary issue. Please try again.';
+  }
+  return m.length > 140 ? 'Something went wrong. Please try again.' : m;
+}
+
 function endpoint() {
   if (GEMINI_API_KEY) {
     return `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
@@ -68,15 +87,29 @@ async function generate(contents, token) {
   const headers = { 'Content-Type': 'application/json' };
   if (GEMINI_API_KEY) headers['x-goog-api-key'] = GEMINI_API_KEY;
   else headers['Authorization'] = `Bearer ${token}`;
+  const body = JSON.stringify({ contents, tools: [{ computerUse: { environment: 'ENVIRONMENT_BROWSER' } }] });
 
-  const res = await fetch(endpoint(), {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ contents, tools: [{ computerUse: { environment: 'ENVIRONMENT_BROWSER' } }] }),
-  });
-  const json = await res.json();
-  if (!res.ok) throw new Error(`Gemini ${res.status}: ${json.error?.message || 'request failed'}`);
-  return json.candidates?.[0]?.content?.parts || [];
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let res;
+    try {
+      res = await fetch(endpoint(), { method: 'POST', headers, body });
+    } catch (netErr) {
+      lastErr = netErr; // network blip — retry
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      continue;
+    }
+    const json = await res.json().catch(() => ({}));
+    if (res.ok) return json.candidates?.[0]?.content?.parts || [];
+    lastErr = new Error(`Gemini ${res.status}: ${json.error?.message || 'request failed'}`);
+    // Retry transient errors (rate limit / server); fail fast on client logic errors.
+    if (res.status === 429 || res.status >= 500) {
+      await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+      continue;
+    }
+    throw lastErr;
+  }
+  throw lastErr;
 }
 
 // Scale a model coordinate (0..1000) to a viewport pixel.
@@ -213,17 +246,17 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
     await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
 
     // Resilient screenshot: pages often navigate between actions, which can make
-    // a single capture protocol-error. Retry briefly before giving up. JPEG keeps
-    // the payload small → faster upload + faster model inference, so the whole
-    // flow finishes inside the remote browser's session window.
+    // a single capture protocol-error. Retry briefly before giving up.
+    // NOTE: Gemini Computer Use REQUIRES PNG in the function-response image —
+    // JPEG is rejected (400) — so keep this PNG.
     const shot = async () => {
       for (let i = 0; i < 3; i++) {
         try {
-          return (await page.screenshot({ type: 'jpeg', quality: 55, timeout: 15000 })).toString('base64');
+          return (await page.screenshot({ timeout: 15000 })).toString('base64');
         } catch (err) {
           if (i === 2) throw err;
           await page.waitForLoadState('domcontentloaded', { timeout: 3000 }).catch(() => {});
-          await page.waitForTimeout(600);
+          await page.waitForTimeout(500);
         }
       }
       return '';
@@ -237,7 +270,7 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
       role: 'user',
       parts: [
         { text: `${goal}\nThe browser viewport is ${VIEWPORT.width}x${VIEWPORT.height}. You are already on ${startUrl}.` },
-        { inlineData: { mimeType: 'image/jpeg', data: screenshot } },
+        { inlineData: { mimeType: 'image/png', data: screenshot } },
       ],
     }];
 
@@ -292,7 +325,7 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
 
       // One screenshot after the turn's actions; attach it to the last response.
       screenshot = await shot();
-      responseParts[responseParts.length - 1].functionResponse.parts = [{ inlineData: { mimeType: 'image/jpeg', data: screenshot } }];
+      responseParts[responseParts.length - 1].functionResponse.parts = [{ inlineData: { mimeType: 'image/png', data: screenshot } }];
       pushFrame(run, Buffer.from(screenshot, 'base64'), redactPAN(`${lastLabel}${reasoning ? ' — ' + reasoning.slice(0, 60) : ''}`));
 
       // If the account-creation action was submitted this turn, finish cleanly —
@@ -322,11 +355,9 @@ async function runComputerUse({ run, goal, startUrl, maxSteps = 18 }) {
       finishRun(run, { result: { ok: true, message: 'Account created (the remote browser closed during the final redirect).' } });
       return;
     }
-    const msg = closed
-      ? 'Remote browser session ended mid-run (likely a session timeout). Raise BROWSER_SESSION_TIMEOUT_MS or add "&timeout=300000" to BROWSER_WS_ENDPOINT.'
-      : err.message;
-    pushStep(run, `Error: ${msg}`);
-    finishRun(run, { error: new Error(msg) });
+    // Technical detail goes to the step log; the result shows a clean message.
+    pushStep(run, `Error: ${err.message}`);
+    finishRun(run, { error: new Error(friendlyError(err.message)) });
   } finally {
     await browser.close().catch(() => {});
   }
